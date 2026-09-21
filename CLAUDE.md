@@ -39,10 +39,26 @@ kodaisai-gantt/
 │   ├── app.js
 │   └── style.css
 ├── tools/
-│   └── build.py           CSV/JSON を HTML に埋め込んで dist/ を出力
+│   ├── build.py           CSV/JSON を HTML に埋め込んで dist/ docs/ を出力
+│   └── publish.sh         ビルド＋commit＋push を1コマンドにしたもの
+├── docs/
+│   └── index.html         GitHub Pages が配信する。中身は dist/index.html と同じ
 └── dist/
-    └── index.html         配布用。これだけ配れば動く
+    ├── index.html         配布用。これだけ配れば動く
+    └── artifact.html      claude.ai で共有するとき用の断片
 ```
+
+## 公開
+
+GitHub Pages で配信する。部員はログイン不要でブラウザから見られる。
+
+- 公開URL：<https://greenapple822.github.io/kodaisai-gantt/>
+- リポジトリ：<https://github.com/Greenapple822/kodaisai-gantt>（public / main ブランチの `/docs`）
+- 更新は `sh tools/publish.sh` だけ。CSV を直したあとこれを叩けば1〜2分で全員の画面が変わる
+
+画面上の編集は各自のブラウザ（localStorage）に「案」として自動保存される。
+これは端末ごとに独立していて、他の部員には見えない。全員に反映するのは CSV 経由の1本に保つ。
+サーバーを持たない方針なので、共有される自動保存は作らない。
 
 ## データ形式
 
