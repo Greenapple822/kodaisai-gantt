@@ -1126,10 +1126,11 @@ VariantStore.prototype.insert = function (v, index) {
 
 /* ---- 案を選ぶ操作盤 ---- */
 
-function VariantBar(store, onLoad) {
+function VariantBar(store, onLoad, sharedEnabled) {
   var self = this;
   this.store = store;
   this.onLoad = onLoad;
+  this.sharedEnabled = !!sharedEnabled;   /* 最初の描画で選択肢に入れる必要がある */
   this.select = document.getElementById('variant-select');
   this.nameInput = document.getElementById('variant-name');
   this.savedMsg = document.getElementById('variant-saved');
@@ -1601,8 +1602,8 @@ function main() {
       /* 案を切り替えたとき。表も図もその内容で作り直す。 */
       editor.setData(normalizeRows(parseCsv(csv)), layout);
       rerender();
-    });
-    variantBar.sharedEnabled = shared.enabled();
+      if (store.isShared()) refreshShared();
+    }, shared.enabled());
     variantBar.getCsv = function () { return toCsv(editor.rows); };
     variantBar.onRemoved = function (v, index) {
       /* 消した案を戻す：他の案の中身を上書きしないよう、案そのものを差し戻す */
@@ -1716,6 +1717,22 @@ function main() {
     whoInput.addEventListener('change', function () {
       try { window.localStorage.setItem('kodaisai-gantt-who', whoInput.value.trim()); } catch (e) { /* 任意なので失敗してよい */ }
     });
+
+    /* 共有を選び直したときの読み込み。起動時と同じ処理を使う。 */
+    function refreshShared() {
+      variantBar.showShared('loading');
+      shared.load().then(function (got) {
+        if (!store.isShared()) return;
+        if (got) {
+          adoptShared(got.csv);
+          variantBar.showShared('saved', { at: got.at, by: got.by });
+        } else {
+          variantBar.savedMsg.textContent = 'まだ誰も編集していません';
+        }
+      }, function () {
+        if (store.isShared()) variantBar.showShared('offline');
+      });
+    }
 
     if (shared.enabled()) {
       variantBar.showShared('loading');
