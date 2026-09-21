@@ -129,12 +129,22 @@
   </p>
   <div class="edit-scroll" id="edit-table"></div>
 
-  <h2 class="edit-section">場所の名前</h2>
+  <h2 class="edit-section">場所（会場の配置）</h2>
   <p class="edit-help">
-    会場が変わった年は、ここで表示名だけ直せます。<code>schedule.csv</code> の「場所」は
-    内部の id で結ばれているので、名前を変えても作業の割り当ては崩れません。
-    位置や大きさを変えるときは <code>data/layout.json</code> の座標を直してください。
+    <strong>平面図の中の場所をクリックしてつかむと動かせます。</strong>
+    右下の青いつまみで大きさを変えられます。<code>schedule.csv</code> の「場所」は内部の id で
+    結ばれているので、動かしても名前を変えても、作業の割り当ては崩れません。
   </p>
+  <div class="layout-bar">
+    <button type="button" id="layout-add">＋ 場所を追加</button>
+    <button type="button" id="layout-reset">配布時の会場に戻す</button>
+  </div>
+  <div class="layout-wrap">
+    <div class="chart layout-canvas" id="layout-canvas"></div>
+    <div class="layout-info" id="layout-info"></div>
+  </div>
+
+  <h3 class="edit-subsection">名前をまとめて直す</h3>
   <div class="area-names" id="area-names"></div>
 </section>
 

@@ -610,6 +610,86 @@ button.primary:hover { filter: brightness(1.08); }
   border-top: 1px solid var(--line);
 }
 
+.edit-subsection {
+  font-size: 12px;
+  color: var(--fg-sub);
+  margin: 18px 0 8px;
+}
+
+.layout-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+
+.layout-bar button {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.layout-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 250px);
+  gap: 12px;
+  align-items: start;
+}
+
+@media (max-width: 760px) {
+  .layout-wrap { grid-template-columns: 1fr; }
+}
+
+.layout-canvas { overflow-x: auto; }
+.layout-canvas svg { display: block; width: 100%; min-width: 520px; height: auto; touch-action: none; }
+
+.la-area rect[data-grab="move"] { cursor: move; }
+.la-handle { cursor: nwse-resize; }
+.la-area:hover rect[data-grab="move"] { stroke: #1f5ea8; }
+
+.layout-info {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  background: var(--bg-alt);
+  font-size: 12px;
+}
+
+.layout-info .empty { margin: 0; }
+
+.la-fields { display: grid; gap: 8px; }
+
+.la-fields label {
+  display: grid;
+  grid-template-columns: 4.5em 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--fg-sub);
+}
+
+.la-fields input {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--fg);
+  min-width: 0;
+}
+
+.la-fields button {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 10px;
+  border: 1px solid #e3b3b3;
+  background: #fff;
+  color: #b91c1c;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
 .area-names {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -901,12 +981,22 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   </p>
   <div class="edit-scroll" id="edit-table"></div>
 
-  <h2 class="edit-section">場所の名前</h2>
+  <h2 class="edit-section">場所（会場の配置）</h2>
   <p class="edit-help">
-    会場が変わった年は、ここで表示名だけ直せます。<code>schedule.csv</code> の「場所」は
-    内部の id で結ばれているので、名前を変えても作業の割り当ては崩れません。
-    位置や大きさを変えるときは <code>data/layout.json</code> の座標を直してください。
+    <strong>平面図の中の場所をクリックしてつかむと動かせます。</strong>
+    右下の青いつまみで大きさを変えられます。<code>schedule.csv</code> の「場所」は内部の id で
+    結ばれているので、動かしても名前を変えても、作業の割り当ては崩れません。
   </p>
+  <div class="layout-bar">
+    <button type="button" id="layout-add">＋ 場所を追加</button>
+    <button type="button" id="layout-reset">配布時の会場に戻す</button>
+  </div>
+  <div class="layout-wrap">
+    <div class="chart layout-canvas" id="layout-canvas"></div>
+    <div class="layout-info" id="layout-info"></div>
+  </div>
+
+  <h3 class="edit-subsection">名前をまとめて直す</h3>
   <div class="area-names" id="area-names"></div>
 </section>
 
@@ -1129,29 +1219,42 @@ function timeRange(items) {
   };
 }
 
-/* 会場エリアの表示名だけを差し替えたレイアウトを作る。
-   id と座標は layout.json のまま。schedule.csv の area は id を指しているので壊れない。 */
-function effectiveLayout(base, names) {
-  names = names || {};
+/* 画面で会場を作り替えたときは、レイアウトまるごとを上書きとして持つ。
+   layout.json 自体は書き換えない。schedule.csv の area は id を指すので、
+   名前を変えても位置を動かしても、作業の割り当ては壊れない。 */
+function cloneLayout(l) {
   return {
-    viewBox: base.viewBox,
-    areas: (base.areas || []).map(function (a) {
+    viewBox: l.viewBox,
+    areas: (l.areas || []).map(function (a) {
       var o = {};
       Object.keys(a).forEach(function (k) { o[k] = a[k]; });
-      if (names[a.id]) o.name = names[a.id];
       return o;
     })
   };
 }
 
-/* 既定の名前と違うものだけを残す。全部持つと layout.json を差し替えづらい。 */
-function diffNames(base, names) {
-  var out = {};
-  (base.areas || []).forEach(function (a) {
-    var v = names[a.id];
-    if (v && v !== a.name) out[a.id] = v;
-  });
-  return out;
+function effectiveLayout(base, override) {
+  return override ? cloneLayout(override) : cloneLayout(base);
+}
+
+/* 既定と同じなら上書きを持たない（layout.json を差し替えやすくしておく） */
+function sameLayout(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/* 古い保存（名前の差分だけ）を、レイアウト上書きに読み替える */
+function layoutFromNames(base, names) {
+  if (!names || !Object.keys(names).length) return null;
+  var l = cloneLayout(base);
+  l.areas.forEach(function (a) { if (names[a.id]) a.name = names[a.id]; });
+  return l;
+}
+
+/* viewBox を数値にする。無ければ既定値。 */
+function viewBoxRect(l) {
+  var p = String(l.viewBox || '0 0 680 400').trim().split(/\s+/).map(Number);
+  if (p.length !== 4 || p.some(isNaN)) p = [0, 0, 680, 400];
+  return { x: p[0], y: p[1], w: p[2], h: p[3] };
 }
 
 /* ある時刻に動いているものを拾う（[start, end) で判定） */
@@ -1613,39 +1716,282 @@ FloorView.prototype.renderList = function (t, tasks, resources) {
   this.listHost.innerHTML = html;
 };
 
+/* =====================  場所の配置（ドラッグ編集）  ===================== */
+/* 平面図の上で直接つかんで動かす。座標は layout.json と同じ単位のまま持つ。 */
+
+var GRID = 5;          /* この刻みに吸い付かせる */
+var MIN_W = 50;
+var MIN_H = 40;
+var HANDLE = 12;       /* 右下のつまみの大きさ */
+
+function LayoutEditor(opts) {
+  this.host = opts.host;
+  this.info = opts.info;
+  this.onChange = opts.onChange;       /* 確定したとき（保存する） */
+  this.onPreview = opts.onPreview;     /* ドラッグ中（保存しない） */
+  this.base = null;
+  this.layout = null;
+  this.selected = null;
+  this.drag = null;
+}
+
+LayoutEditor.prototype.setData = function (base, layout) {
+  this.base = base;
+  this.layout = cloneLayout(layout || base);
+  if (this.selected && !this.byId(this.selected)) this.selected = null;
+  this.render();
+};
+
+LayoutEditor.prototype.byId = function (id) {
+  var found = null;
+  this.layout.areas.forEach(function (a) { if (a.id === id) found = a; });
+  return found;
+};
+
+function snap(v) { return Math.round(v / GRID) * GRID; }
+
+/* 画面の座標を、図の中の座標に直す */
+LayoutEditor.prototype.toLocal = function (evt) {
+  var pt = this.svg.createSVGPoint();
+  pt.x = evt.clientX;
+  pt.y = evt.clientY;
+  var m = this.svg.getScreenCTM();
+  if (!m) return { x: 0, y: 0 };
+  var p = pt.matrixTransform(m.inverse());
+  return { x: p.x, y: p.y };
+};
+
+LayoutEditor.prototype.render = function () {
+  var self = this;
+  var box = viewBoxRect(this.layout);
+
+  this.host.innerHTML = '';
+  var svg = el('svg', {
+    viewBox: this.layout.viewBox || '0 0 680 400',
+    role: 'application',
+    'aria-label': '会場の配置を編集する平面図'
+  }, this.host);
+  this.svg = svg;
+
+  /* 目安の方眼。吸い付く刻みと同じにしておくと動かしやすい。 */
+  var defs = el('defs', null, svg);
+  var pat = el('pattern', { id: 'grid', width: GRID * 4, height: GRID * 4, patternUnits: 'userSpaceOnUse' }, defs);
+  el('path', {
+    d: 'M ' + (GRID * 4) + ' 0 L 0 0 0 ' + (GRID * 4),
+    fill: 'none', stroke: '#e8ebef', 'stroke-width': 1
+  }, pat);
+  el('rect', { x: box.x, y: box.y, width: box.w, height: box.h, fill: 'url(#grid)' }, svg);
+  el('rect', {
+    x: box.x + 1, y: box.y + 1, width: box.w - 2, height: box.h - 2,
+    fill: 'none', stroke: '#cfd4da', 'stroke-dasharray': '4 4'
+  }, svg);
+
+  this.layout.areas.forEach(function (a) {
+    var on = a.id === self.selected;
+    var g = el('g', { 'data-area': a.id, class: 'la-area' + (on ? ' la-on' : '') }, svg);
+    el('rect', {
+      x: a.x, y: a.y, width: a.w, height: a.h, rx: 6,
+      fill: on ? '#e8f0fb' : '#f6f7f9',
+      stroke: on ? '#1f5ea8' : '#a8afb8',
+      'stroke-width': on ? 2 : 1,
+      'data-grab': 'move'
+    }, g);
+    var label = el('text', {
+      x: a.x + 8, y: a.y + 17, 'font-size': 12, 'font-weight': 'bold',
+      fill: on ? '#17456f' : '#5b6169', 'pointer-events': 'none'
+    }, g);
+    fitText(label, a.name, a.w - 16);
+    var size = el('text', {
+      x: a.x + 8, y: a.y + 31, 'font-size': 10, fill: '#8a9099', 'pointer-events': 'none'
+    }, g);
+    size.textContent = a.w + '×' + a.h;
+
+    if (on) {
+      /* 右下のつまみで大きさを変える */
+      el('rect', {
+        x: a.x + a.w - HANDLE, y: a.y + a.h - HANDLE, width: HANDLE, height: HANDLE,
+        fill: '#1f5ea8', rx: 2, 'data-grab': 'resize', class: 'la-handle'
+      }, g);
+    }
+  });
+
+  this.bind();
+  this.showInfo();
+};
+
+LayoutEditor.prototype.bind = function () {
+  var self = this;
+  this.svg.addEventListener('pointerdown', function (e) {
+    var target = e.target;
+    var grab = target.getAttribute && target.getAttribute('data-grab');
+    var g = target.parentNode;
+    var id = g && g.getAttribute ? g.getAttribute('data-area') : null;
+    if (!grab || !id) { self.select(null); return; }
+
+    e.preventDefault();
+    self.select(id);
+    var a = self.byId(id);
+    var start = self.toLocal(e);
+    self.drag = {
+      id: id, mode: grab,
+      ox: start.x, oy: start.y,
+      x: a.x, y: a.y, w: a.w, h: a.h
+    };
+    try { self.svg.setPointerCapture(e.pointerId); } catch (err) { /* 古い環境では掴まなくてよい */ }
+  });
+
+  this.svg.addEventListener('pointermove', function (e) {
+    if (!self.drag) return;
+    e.preventDefault();
+    var p = self.toLocal(e);
+    var d = self.drag;
+    var box = viewBoxRect(self.layout);
+    var a = self.byId(d.id);
+    if (!a) return;
+
+    if (d.mode === 'move') {
+      a.x = Math.min(Math.max(box.x, snap(d.x + (p.x - d.ox))), box.x + box.w - d.w);
+      a.y = Math.min(Math.max(box.y, snap(d.y + (p.y - d.oy))), box.y + box.h - d.h);
+    } else {
+      a.w = Math.min(Math.max(MIN_W, snap(d.w + (p.x - d.ox))), box.x + box.w - a.x);
+      a.h = Math.min(Math.max(MIN_H, snap(d.h + (p.y - d.oy))), box.y + box.h - a.y);
+    }
+    self.render();
+    if (self.onPreview) self.onPreview(self.layout);
+  });
+
+  function finish(e) {
+    if (!self.drag) return;
+    self.drag = null;
+    try { self.svg.releasePointerCapture(e.pointerId); } catch (err) { /* 掴んでいなければ何もしない */ }
+    self.onChange(self.layout);          /* ここで初めて保存する */
+  }
+  this.svg.addEventListener('pointerup', finish);
+  this.svg.addEventListener('pointercancel', finish);
+};
+
+LayoutEditor.prototype.select = function (id) {
+  if (this.selected === id) return;
+  this.selected = id;
+  this.render();
+};
+
+/* 選んでいる場所の数値を出す。キーボードでも直せるようにする。 */
+LayoutEditor.prototype.showInfo = function () {
+  var a = this.selected ? this.byId(this.selected) : null;
+  if (!a) {
+    this.info.innerHTML = '<p class="empty">平面図の中の場所をクリックすると、'
+      + 'つかんで動かせます。右下の青いつまみで大きさを変えられます。</p>';
+    return;
+  }
+  this.info.innerHTML = '<div class="la-fields">'
+    + '<label>名前<input type="text" data-geo="name" value="' + esc(a.name) + '"></label>'
+    + '<label>横位置<input type="number" data-geo="x" value="' + a.x + '" step="' + GRID + '"></label>'
+    + '<label>縦位置<input type="number" data-geo="y" value="' + a.y + '" step="' + GRID + '"></label>'
+    + '<label>幅<input type="number" data-geo="w" value="' + a.w + '" step="' + GRID + '" min="' + MIN_W + '"></label>'
+    + '<label>高さ<input type="number" data-geo="h" value="' + a.h + '" step="' + GRID + '" min="' + MIN_H + '"></label>'
+    + '<button type="button" data-geo-act="remove" class="danger">この場所を削除</button>'
+    + '</div>';
+};
+
+LayoutEditor.prototype.bindInfo = function () {
+  var self = this;
+  this.info.addEventListener('input', function (e) {
+    var f = e.target.getAttribute && e.target.getAttribute('data-geo');
+    if (!f || !self.selected) return;
+    var a = self.byId(self.selected);
+    if (!a) return;
+    if (f === 'name') {
+      a.name = e.target.value;
+    } else {
+      var v = parseInt(e.target.value, 10);
+      if (isNaN(v)) return;
+      var box = viewBoxRect(self.layout);
+      if (f === 'x') a.x = Math.min(Math.max(box.x, v), box.x + box.w - a.w);
+      if (f === 'y') a.y = Math.min(Math.max(box.y, v), box.y + box.h - a.h);
+      if (f === 'w') a.w = Math.min(Math.max(MIN_W, v), box.x + box.w - a.x);
+      if (f === 'h') a.h = Math.min(Math.max(MIN_H, v), box.y + box.h - a.y);
+    }
+    self.renderKeepingFocus(e.target);
+    self.onChange(self.layout);
+  });
+
+  this.info.addEventListener('click', function (e) {
+    var act = e.target.getAttribute && e.target.getAttribute('data-geo-act');
+    if (act === 'remove') self.remove();
+  });
+};
+
+/* 数値を打っている最中に作り直すとカーソルが飛ぶので、図だけ描き直す */
+LayoutEditor.prototype.renderKeepingFocus = function (keep) {
+  var id = keep && keep.getAttribute('data-geo');
+  var pos = keep && keep.selectionStart;
+  this.render();
+  if (!id) return;
+  var again = this.info.querySelector('[data-geo="' + id + '"]');
+  if (!again) return;
+  again.focus();
+  try { again.setSelectionRange(pos, pos); } catch (e) { /* number 欄では使えない */ }
+};
+
+LayoutEditor.prototype.add = function () {
+  var used = {};
+  this.layout.areas.forEach(function (a) { used[a.id] = true; });
+  var id = 'area';
+  for (var n = 1; n < 999; n++) { if (!used['area' + n]) { id = 'area' + n; break; } }
+  var box = viewBoxRect(this.layout);
+  this.layout.areas.push({
+    id: id, name: '新しい場所',
+    x: snap(box.x + box.w / 2 - 60), y: snap(box.y + box.h / 2 - 30), w: 120, h: 60
+  });
+  this.selected = id;
+  this.render();
+  this.onChange(this.layout, true);
+  return id;
+};
+
+LayoutEditor.prototype.remove = function () {
+  if (!this.selected) return null;
+  var id = this.selected;
+  var gone = this.byId(id);
+  this.layout.areas = this.layout.areas.filter(function (a) { return a.id !== id; });
+  this.selected = null;
+  this.render();
+  this.onChange(this.layout, true);
+  return gone;
+};
+
 /* =====================  場所の名前  ===================== */
 /* 会場が変わった年に、JSON を開かずに名前だけ直せるようにする。 */
 
 function AreaNamesView(opts) {
   this.host = opts.host;
   this.onChange = opts.onChange;
-  this.base = null;
-  this.names = {};
+  this.layout = null;
   var self = this;
 
   this.host.addEventListener('input', function (e) {
     var id = e.target.getAttribute && e.target.getAttribute('data-area');
     if (!id) return;
-    var v = e.target.value.trim();
-    if (v) self.names[id] = v; else delete self.names[id];
-    self.onChange();
+    self.layout.areas.forEach(function (a) {
+      if (a.id === id) a.name = e.target.value;
+    });
+    self.onChange(self.layout);
   });
 }
 
-AreaNamesView.prototype.setData = function (base, names) {
-  this.base = base;
-  this.names = names || {};
+AreaNamesView.prototype.setData = function (layout) {
+  this.layout = layout;
   this.render();
 };
 
 AreaNamesView.prototype.render = function () {
-  var self = this;
-  this.host.innerHTML = (this.base.areas || []).map(function (a) {
+  this.host.innerHTML = ((this.layout && this.layout.areas) || []).map(function (a) {
     var id = 'area-name-' + a.id;
     return '<div class="area-row">'
-      + '<label for="' + id + '">' + esc(a.name) + '</label>'
+      + '<label for="' + id + '">' + esc(a.id) + '</label>'
       + '<input type="text" id="' + id + '" data-area="' + esc(a.id) + '" '
-      + 'value="' + esc(self.names[a.id] || a.name) + '" aria-label="' + esc(a.name) + ' の表示名">'
+      + 'value="' + esc(a.name) + '" aria-label="' + esc(a.id) + ' の表示名">'
       + '</div>';
   }).join('');
 };
@@ -1963,10 +2309,16 @@ SharedStore.prototype.parse = function (text) {
   try {
     var o = JSON.parse(text);
     if (o && typeof o.csv === 'string') {
-      return { csv: o.csv, names: o.names || {}, at: o.at || null, by: o.by || '' };
+      return {
+        csv: o.csv,
+        layout: o.layout || null,
+        names: o.names || null,          /* 古い形式 */
+        at: o.at || null,
+        by: o.by || ''
+      };
     }
   } catch (e) { /* JSON でなければ素の CSV とみなす */ }
-  return { csv: text, names: {}, at: null, by: '' };
+  return { csv: text, layout: null, names: null, at: null, by: '' };
 };
 
 SharedStore.prototype.load = function () {
@@ -1979,7 +2331,7 @@ SharedStore.prototype.load = function () {
     var got = self.parse(text);
     if (got) {
       self.remoteCsv = got.csv;
-      self.remoteNames = got.names;
+      self.remoteLayout = got.layout;
       self.at = got.at;
       self.by = got.by;
     }
@@ -1987,10 +2339,10 @@ SharedStore.prototype.load = function () {
   });
 };
 
-SharedStore.prototype.save = function (csv, names, by) {
+SharedStore.prototype.save = function (csv, layout, by) {
   var self = this;
   if (!this.url) return Promise.reject(new Error('共有先が設定されていません'));
-  var body = JSON.stringify({ csv: csv, names: names || {}, at: Date.now(), by: by || '' });
+  var body = JSON.stringify({ csv: csv, layout: layout || null, at: Date.now(), by: by || '' });
   /* text/plain にしておくと、ブラウザが事前問い合わせ(preflight)をしないで済む */
   return fetch(this.url, {
     method: 'POST',
@@ -1999,7 +2351,7 @@ SharedStore.prototype.save = function (csv, names, by) {
   }).then(function (r) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     self.remoteCsv = csv;
-    self.remoteNames = names || {};
+    self.remoteLayout = layout || null;
     self.at = Date.now();
     self.by = by || '';
     return self.at;
@@ -2083,11 +2435,13 @@ VariantStore.prototype.currentCsv = function () {
   return v ? v.csv : this.base;
 };
 
-/* 場所の名前も予定の一部として一緒に持ち運ぶ */
-VariantStore.prototype.currentNames = function () {
-  if (this.isShared()) return this.sharedNames || {};
+/* 会場のレイアウトも予定の一部として一緒に持ち運ぶ（既定のままなら null） */
+VariantStore.prototype.currentLayout = function () {
+  if (this.isShared()) return this.sharedLayout || null;
   var v = this.active();
-  return (v && v.names) || {};
+  if (!v) return null;
+  if (v.layout) return v.layout;
+  return layoutFromNames(this.baseLayout, v.names);   /* 古い保存の読み替え */
 };
 
 VariantStore.prototype.uniqueName = function (want) {
@@ -2099,9 +2453,9 @@ VariantStore.prototype.uniqueName = function (want) {
   return name + Date.now();
 };
 
-VariantStore.prototype.create = function (csv, want, names) {
+VariantStore.prototype.create = function (csv, want, layout) {
   var v = { name: this.uniqueName(want || ('案' + (this.list.length + 1))), csv: csv,
-            names: names || {}, at: Date.now() };
+            layout: layout || null, at: Date.now() };
   this.list.push(v);
   this.activeName = v.name;
   this.save();
@@ -2109,17 +2463,15 @@ VariantStore.prototype.create = function (csv, want, names) {
 };
 
 /* 自動保存。配布時の予定を見たまま編集したら、新しい案を起こす。 */
-VariantStore.prototype.put = function (csv, names) {
-  names = names || {};
-  var renamed = Object.keys(names).length > 0;
-  if (this.isShared()) { this.sharedCsv = csv; this.sharedNames = names; return null; }
+VariantStore.prototype.put = function (csv, layout) {
+  if (this.isShared()) { this.sharedCsv = csv; this.sharedLayout = layout || null; return null; }
   var v = this.active();
   if (!v) {
-    if (csv === this.base && !renamed) return null;   /* 何も変えていない */
-    return this.create(csv, '案1', names);
+    if (csv === this.base && !layout) return null;   /* 何も変えていない */
+    return this.create(csv, '案1', layout);
   }
   v.csv = csv;
-  v.names = names;
+  v.layout = layout || null;
   v.at = Date.now();
   this.save();
   return v;
@@ -2181,7 +2533,7 @@ function VariantBar(store, onLoad, sharedEnabled) {
   });
 
   document.getElementById('variant-new').addEventListener('click', function () {
-    store.create(self.getCsv(), '', store.currentNames());
+    store.create(self.getCsv(), '', store.currentLayout());
     self.render();
     self.flash('新しい案として保存しました');
     self.nameInput.focus();
@@ -2259,13 +2611,13 @@ VariantBar.prototype.flash = function (text) {
 };
 
 /* 編集のたびに呼ばれる。保存して、選択欄の見た目を合わせる。 */
-VariantBar.prototype.autoSave = function (csv, names) {
+VariantBar.prototype.autoSave = function (csv, layout) {
   if (this.store.isShared()) {          /* 共有の保存は main 側が受け持つ */
-    this.store.put(csv, names);
+    this.store.put(csv, layout);
     return true;
   }
   var wasActive = this.store.activeName;
-  var v = this.store.put(csv, names);
+  var v = this.store.put(csv, layout);
   if (this.store.activeName !== wasActive) this.render();   /* 案が新しくできた */
   else this.showSaved(v);
   return this.store.persistent;
@@ -2603,19 +2955,20 @@ function loadData() {
 function main() {
   var chart = document.getElementById('view-team');
   loadData().then(function (d) {
-    var baseLayout = d.layout;          /* layout.json そのもの。id と座標はここが正 */
-    var areaNames = {};                 /* 画面で変えた表示名だけを持つ */
-    var layout = baseLayout;            /* 表示に使う（名前を差し替えたもの） */
+    var baseLayout = d.layout;          /* layout.json そのもの。配布時の会場 */
+    var layoutOverride = null;          /* 画面で作り替えた会場（既定のままなら null） */
+    var layout = baseLayout;            /* 表示に使うレイアウト */
     var originalCsv = d.csv;
 
     var shared = new SharedStore(d.share);
 
     /* この端末に保存されている案があれば、前回の続きから開く */
     var store = new VariantStore(originalCsv);
+    store.baseLayout = baseLayout;      /* 古い保存の読み替えに使う */
     if (shared.enabled() && store.activeName === null) store.activeName = SHARED_KEY;
     var startCsv = store.currentCsv();
-    areaNames = store.currentNames();
-    layout = effectiveLayout(baseLayout, areaNames);
+    layoutOverride = store.currentLayout();
+    layout = effectiveLayout(baseLayout, layoutOverride);
 
     var undoBar = new UndoBar();
 
@@ -2652,18 +3005,39 @@ function main() {
     var preview = new PreviewPane(model, layout);
     editor.watchFocus(function (row) { preview.highlight(row); });
 
-    var areaView = new AreaNamesView({
-      host: document.getElementById('area-names'),
-      onChange: function () { applyNames(); }
+    var layoutEditor = new LayoutEditor({
+      host: document.getElementById('layout-canvas'),
+      info: document.getElementById('layout-info'),
+      onChange: function (l, structural) { applyLayout(l, structural); },
+      onPreview: function (l) { previewLayout(l); }
     });
-    areaView.setData(baseLayout, areaNames);
+    layoutEditor.bindInfo();
 
-    /* 名前を直したら、表の「場所」欄と図の両方に反映する */
-    function applyNames() {
-      areaNames = diffNames(baseLayout, areaView.names);
-      layout = effectiveLayout(baseLayout, areaNames);
+    var areaView = new AreaNamesView({
+      /* 名前欄からの変更。打っている最中に自分を作り直さない。 */
+      host: document.getElementById('area-names'),
+      onChange: function (l) { applyLayout(l, false, true); layoutEditor.setData(baseLayout, l); }
+    });
+    areaView.setData(layout);
+    layoutEditor.setData(baseLayout, layout);
+
+    /* ドラッグ中は保存せず、図だけ追従させる */
+    function previewLayout(l) {
+      layout = cloneLayout(l);
       editor.layout = layout;
-      relabelAreaOptions();
+      var m = buildModel(toCsv(editor.rows), layout);
+      floor.setModel(m);
+      preview.setModel(m);
+    }
+
+    /* 確定したとき。会場が変わったので、表の「場所」欄も図も作り直して保存する。 */
+    function applyLayout(l, structural, fromNames) {
+      layout = cloneLayout(l);
+      layoutOverride = sameLayout(layout, baseLayout) ? null : layout;
+      editor.layout = layout;
+      if (!fromNames) areaView.setData(layout);
+      if (structural) editor.render();        /* 場所が増減したら選択肢ごと作り直す */
+      else relabelAreaOptions();
       refresh();
     }
 
@@ -2679,9 +3053,10 @@ function main() {
 
     var variantBar = new VariantBar(store, function (csv) {
       /* 案を切り替えたとき。表も図も場所の名前も、その案の内容にする。 */
-      areaNames = store.currentNames();
-      layout = effectiveLayout(baseLayout, areaNames);
-      areaView.setData(baseLayout, areaNames);
+      layoutOverride = store.currentLayout();
+      layout = effectiveLayout(baseLayout, layoutOverride);
+      areaView.setData(layout);
+      layoutEditor.setData(baseLayout, layout);
       editor.layout = layout;
       editor.setData(normalizeRows(parseCsv(csv)), layout);
       rerender();
@@ -2717,7 +3092,7 @@ function main() {
     /* 編集されるたびに、同じ CSV から全ビューを作り直し、自動保存する */
     function refresh() {
       var csv = rerender();
-      variantBar.autoSave(csv, areaNames);
+      variantBar.autoSave(csv, layoutOverride);
       if (store.isShared()) queueSharedSave();
       updateDraftBar(store);
     }
@@ -2747,7 +3122,7 @@ function main() {
       var csv = pendingCsv;
       pendingCsv = null;
       savingNow = true;
-      shared.save(csv, areaNames, who()).then(function (at) {
+      shared.save(csv, layoutOverride, who()).then(function (at) {
         savingNow = false;
         variantBar.showShared('saved', { at: at, by: who() });
         if (pendingCsv !== null) flushSharedSave();   /* 送っている間の変更を送り直す */
@@ -2760,12 +3135,13 @@ function main() {
     }
 
     /* サーバーの内容を画面に入れる */
-    function adoptShared(csv, names) {
+    function adoptShared(csv, remoteLayout, legacyNames) {
       store.sharedCsv = csv;
-      store.sharedNames = names || {};
-      areaNames = store.sharedNames;
-      layout = effectiveLayout(baseLayout, areaNames);
-      areaView.setData(baseLayout, areaNames);
+      store.sharedLayout = remoteLayout || layoutFromNames(baseLayout, legacyNames);
+      layoutOverride = store.sharedLayout;
+      layout = effectiveLayout(baseLayout, layoutOverride);
+      areaView.setData(layout);
+      layoutEditor.setData(baseLayout, layout);
       editor.layout = layout;
       editor.setData(normalizeRows(parseCsv(csv)), layout);
       rerender();
@@ -2780,7 +3156,7 @@ function main() {
         var mine = toCsv(editor.rows);
         if (got.csv === mine) return;
         if (mine === (store.sharedCsv || originalCsv)) {
-          adoptShared(got.csv, got.names);                      /* 自分は何も変えていない。黙って追従。 */
+          adoptShared(got.csv, got.layout, got.names);                      /* 自分は何も変えていない。黙って追従。 */
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else {
           /* 自分の編集を消さない。読み込むかどうかは本人に決めさせる。 */
@@ -2793,7 +3169,7 @@ function main() {
     }
 
     document.getElementById('shared-load').addEventListener('click', function () {
-      shared.load().then(function (got) { if (got) adoptShared(got.csv, got.names); });
+      shared.load().then(function (got) { if (got) adoptShared(got.csv, got.layout, got.names); });
     });
     document.getElementById('shared-keep').addEventListener('click', function () {
       document.getElementById('shared-conflict').hidden = true;
@@ -2812,7 +3188,7 @@ function main() {
       shared.load().then(function (got) {
         if (!store.isShared()) return;
         if (got) {
-          adoptShared(got.csv, got.names);
+          adoptShared(got.csv, got.layout, got.names);
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else {
           variantBar.savedMsg.textContent = 'まだ誰も編集していません';
@@ -2826,7 +3202,7 @@ function main() {
       variantBar.showShared('loading');
       shared.load().then(function (got) {
         if (got && store.isShared()) {
-          adoptShared(got.csv, got.names);
+          adoptShared(got.csv, got.layout, got.names);
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else if (store.isShared()) {
           /* まだ誰も保存していない。配布時の予定がそのまま「みんなの予定」になる。 */
@@ -2851,11 +3227,19 @@ function main() {
     });
 
     setupCsvDialog(function () {
-      var changed = Object.keys(areaNames).length > 0;
       return {
         csv: toCsv(editor.rows),
-        layout: changed ? JSON.stringify(layout, null, 2) + '\n' : null
+        layout: layoutOverride ? JSON.stringify(layout, null, 2) + '\n' : null
       };
+    });
+
+    document.getElementById('layout-add').addEventListener('click', function () {
+      layoutEditor.add();
+    });
+
+    document.getElementById('layout-reset').addEventListener('click', function () {
+      layoutEditor.setData(baseLayout, baseLayout);
+      applyLayout(cloneLayout(baseLayout), true);
     });
 
     document.getElementById('floor-prev').addEventListener('click', function () { floor.step(-1); });
