@@ -128,6 +128,14 @@
     <strong>担当</strong>は複数なら <code>・</code> 区切りで書きます。
   </p>
   <div class="edit-scroll" id="edit-table"></div>
+
+  <h2 class="edit-section">場所の名前</h2>
+  <p class="edit-help">
+    会場が変わった年は、ここで表示名だけ直せます。<code>schedule.csv</code> の「場所」は
+    内部の id で結ばれているので、名前を変えても作業の割り当ては崩れません。
+    位置や大きさを変えるときは <code>data/layout.json</code> の座標を直してください。
+  </p>
+  <div class="area-names" id="area-names"></div>
 </section>
 
 <footer class="no-print">
@@ -149,6 +157,15 @@
     <p>この内容を <code>data/schedule.csv</code> にまるごと貼り付けて、
       <code>python3 tools/build.py</code> を実行すると、全員の分に反映されます。</p>
     <textarea id="csv-text" spellcheck="false" aria-label="書き出したCSV"></textarea>
+
+    <div id="layout-out" hidden>
+      <h3>場所の名前も変わっています</h3>
+      <p>こちらは <code>data/layout.json</code> にまるごと貼り付けてください。</p>
+      <textarea id="layout-text" spellcheck="false" aria-label="書き出したlayout.json"></textarea>
+      <div class="modal-ops">
+        <button type="button" id="layout-copy">layout.json をコピー</button>
+      </div>
+    </div>
     <p id="csv-msg" class="csv-msg" role="status"></p>
     <div class="modal-ops">
       <button type="button" id="csv-copy" class="primary">コピー</button>

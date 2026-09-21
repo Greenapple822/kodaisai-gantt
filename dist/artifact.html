@@ -601,6 +601,65 @@ button.primary:hover { filter: brightness(1.08); }
   background: #fff;
 }
 
+/* ---------- 場所の名前 ---------- */
+
+.edit-section {
+  font-size: 14px;
+  margin: 22px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.area-names {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.area-row { display: grid; grid-template-columns: 7em 1fr; align-items: center; gap: 8px; }
+
+.area-row label {
+  font-size: 11px;
+  color: var(--fg-sub);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.area-row input {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--fg);
+  min-width: 0;
+}
+
+.area-row input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+#layout-out { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+#layout-out h3 { margin: 0 0 6px; color: var(--fg); font-size: 13px; }
+#layout-out[hidden] { display: none; }
+
+#layout-text {
+  width: 100%;
+  min-height: 130px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-alt);
+  color: var(--fg);
+  resize: vertical;
+}
+
 /* ---------- CSV 書き出しダイアログ ---------- */
 
 /* id セレクタの display は [hidden] より強い。明示的に打ち消す。 */
@@ -841,6 +900,14 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     <strong>担当</strong>は複数なら <code>・</code> 区切りで書きます。
   </p>
   <div class="edit-scroll" id="edit-table"></div>
+
+  <h2 class="edit-section">場所の名前</h2>
+  <p class="edit-help">
+    会場が変わった年は、ここで表示名だけ直せます。<code>schedule.csv</code> の「場所」は
+    内部の id で結ばれているので、名前を変えても作業の割り当ては崩れません。
+    位置や大きさを変えるときは <code>data/layout.json</code> の座標を直してください。
+  </p>
+  <div class="area-names" id="area-names"></div>
 </section>
 
 <footer class="no-print">放送研究会　工大祭ステージ企画　／　データ更新：2026/09/16 19:10　／　内容を直すときは部内の schedule.csv を編集してこのページを差し替えてください。</footer>
@@ -859,6 +926,15 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     <p>この内容を <code>data/schedule.csv</code> にまるごと貼り付けて、
       <code>python3 tools/build.py</code> を実行すると、全員の分に反映されます。</p>
     <textarea id="csv-text" spellcheck="false" aria-label="書き出したCSV"></textarea>
+
+    <div id="layout-out" hidden>
+      <h3>場所の名前も変わっています</h3>
+      <p>こちらは <code>data/layout.json</code> にまるごと貼り付けてください。</p>
+      <textarea id="layout-text" spellcheck="false" aria-label="書き出したlayout.json"></textarea>
+      <div class="modal-ops">
+        <button type="button" id="layout-copy">layout.json をコピー</button>
+      </div>
+    </div>
     <p id="csv-msg" class="csv-msg" role="status"></p>
     <div class="modal-ops">
       <button type="button" id="csv-copy" class="primary">コピー</button>
@@ -1051,6 +1127,31 @@ function timeRange(items) {
     start: Math.floor(min / SNAP) * SNAP,
     end: Math.ceil(max / SNAP) * SNAP
   };
+}
+
+/* 会場エリアの表示名だけを差し替えたレイアウトを作る。
+   id と座標は layout.json のまま。schedule.csv の area は id を指しているので壊れない。 */
+function effectiveLayout(base, names) {
+  names = names || {};
+  return {
+    viewBox: base.viewBox,
+    areas: (base.areas || []).map(function (a) {
+      var o = {};
+      Object.keys(a).forEach(function (k) { o[k] = a[k]; });
+      if (names[a.id]) o.name = names[a.id];
+      return o;
+    })
+  };
+}
+
+/* 既定の名前と違うものだけを残す。全部持つと layout.json を差し替えづらい。 */
+function diffNames(base, names) {
+  var out = {};
+  (base.areas || []).forEach(function (a) {
+    var v = names[a.id];
+    if (v && v !== a.name) out[a.id] = v;
+  });
+  return out;
 }
 
 /* ある時刻に動いているものを拾う（[start, end) で判定） */
@@ -1512,6 +1613,43 @@ FloorView.prototype.renderList = function (t, tasks, resources) {
   this.listHost.innerHTML = html;
 };
 
+/* =====================  場所の名前  ===================== */
+/* 会場が変わった年に、JSON を開かずに名前だけ直せるようにする。 */
+
+function AreaNamesView(opts) {
+  this.host = opts.host;
+  this.onChange = opts.onChange;
+  this.base = null;
+  this.names = {};
+  var self = this;
+
+  this.host.addEventListener('input', function (e) {
+    var id = e.target.getAttribute && e.target.getAttribute('data-area');
+    if (!id) return;
+    var v = e.target.value.trim();
+    if (v) self.names[id] = v; else delete self.names[id];
+    self.onChange();
+  });
+}
+
+AreaNamesView.prototype.setData = function (base, names) {
+  this.base = base;
+  this.names = names || {};
+  this.render();
+};
+
+AreaNamesView.prototype.render = function () {
+  var self = this;
+  this.host.innerHTML = (this.base.areas || []).map(function (a) {
+    var id = 'area-name-' + a.id;
+    return '<div class="area-row">'
+      + '<label for="' + id + '">' + esc(a.name) + '</label>'
+      + '<input type="text" id="' + id + '" data-area="' + esc(a.id) + '" '
+      + 'value="' + esc(self.names[a.id] || a.name) + '" aria-label="' + esc(a.name) + ' の表示名">'
+      + '</div>';
+  }).join('');
+};
+
 /* =====================  編集パネル  ===================== */
 /* 画面で直したものを CSV に書き戻す。唯一の真実は最後まで schedule.csv のまま。 */
 
@@ -1824,9 +1962,11 @@ SharedStore.prototype.parse = function (text) {
   if (!text || !text.trim()) return null;
   try {
     var o = JSON.parse(text);
-    if (o && typeof o.csv === 'string') return { csv: o.csv, at: o.at || null, by: o.by || '' };
+    if (o && typeof o.csv === 'string') {
+      return { csv: o.csv, names: o.names || {}, at: o.at || null, by: o.by || '' };
+    }
   } catch (e) { /* JSON でなければ素の CSV とみなす */ }
-  return { csv: text, at: null, by: '' };
+  return { csv: text, names: {}, at: null, by: '' };
 };
 
 SharedStore.prototype.load = function () {
@@ -1837,15 +1977,20 @@ SharedStore.prototype.load = function () {
     return r.text();
   }).then(function (text) {
     var got = self.parse(text);
-    if (got) { self.remoteCsv = got.csv; self.at = got.at; self.by = got.by; }
+    if (got) {
+      self.remoteCsv = got.csv;
+      self.remoteNames = got.names;
+      self.at = got.at;
+      self.by = got.by;
+    }
     return got;
   });
 };
 
-SharedStore.prototype.save = function (csv, by) {
+SharedStore.prototype.save = function (csv, names, by) {
   var self = this;
   if (!this.url) return Promise.reject(new Error('共有先が設定されていません'));
-  var body = JSON.stringify({ csv: csv, at: Date.now(), by: by || '' });
+  var body = JSON.stringify({ csv: csv, names: names || {}, at: Date.now(), by: by || '' });
   /* text/plain にしておくと、ブラウザが事前問い合わせ(preflight)をしないで済む */
   return fetch(this.url, {
     method: 'POST',
@@ -1854,6 +1999,7 @@ SharedStore.prototype.save = function (csv, by) {
   }).then(function (r) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     self.remoteCsv = csv;
+    self.remoteNames = names || {};
     self.at = Date.now();
     self.by = by || '';
     return self.at;
@@ -1937,6 +2083,13 @@ VariantStore.prototype.currentCsv = function () {
   return v ? v.csv : this.base;
 };
 
+/* 場所の名前も予定の一部として一緒に持ち運ぶ */
+VariantStore.prototype.currentNames = function () {
+  if (this.isShared()) return this.sharedNames || {};
+  var v = this.active();
+  return (v && v.names) || {};
+};
+
 VariantStore.prototype.uniqueName = function (want) {
   var name = want || '案';
   if (!this.byName(name)) return name;
@@ -1946,8 +2099,9 @@ VariantStore.prototype.uniqueName = function (want) {
   return name + Date.now();
 };
 
-VariantStore.prototype.create = function (csv, want) {
-  var v = { name: this.uniqueName(want || ('案' + (this.list.length + 1))), csv: csv, at: Date.now() };
+VariantStore.prototype.create = function (csv, want, names) {
+  var v = { name: this.uniqueName(want || ('案' + (this.list.length + 1))), csv: csv,
+            names: names || {}, at: Date.now() };
   this.list.push(v);
   this.activeName = v.name;
   this.save();
@@ -1955,14 +2109,17 @@ VariantStore.prototype.create = function (csv, want) {
 };
 
 /* 自動保存。配布時の予定を見たまま編集したら、新しい案を起こす。 */
-VariantStore.prototype.put = function (csv) {
-  if (this.isShared()) { this.sharedCsv = csv; return null; }
+VariantStore.prototype.put = function (csv, names) {
+  names = names || {};
+  var renamed = Object.keys(names).length > 0;
+  if (this.isShared()) { this.sharedCsv = csv; this.sharedNames = names; return null; }
   var v = this.active();
   if (!v) {
-    if (csv === this.base) return null;      /* 変えていないなら何もしない */
-    return this.create(csv, '案1');
+    if (csv === this.base && !renamed) return null;   /* 何も変えていない */
+    return this.create(csv, '案1', names);
   }
   v.csv = csv;
+  v.names = names;
   v.at = Date.now();
   this.save();
   return v;
@@ -2024,7 +2181,7 @@ function VariantBar(store, onLoad, sharedEnabled) {
   });
 
   document.getElementById('variant-new').addEventListener('click', function () {
-    store.create(self.getCsv(), '');
+    store.create(self.getCsv(), '', store.currentNames());
     self.render();
     self.flash('新しい案として保存しました');
     self.nameInput.focus();
@@ -2102,13 +2259,13 @@ VariantBar.prototype.flash = function (text) {
 };
 
 /* 編集のたびに呼ばれる。保存して、選択欄の見た目を合わせる。 */
-VariantBar.prototype.autoSave = function (csv) {
+VariantBar.prototype.autoSave = function (csv, names) {
   if (this.store.isShared()) {          /* 共有の保存は main 側が受け持つ */
-    this.store.put(csv);
+    this.store.put(csv, names);
     return true;
   }
   var wasActive = this.store.activeName;
-  var v = this.store.put(csv);
+  var v = this.store.put(csv, names);
   if (this.store.activeName !== wasActive) this.render();   /* 案が新しくできた */
   else this.showSaved(v);
   return this.store.persistent;
@@ -2257,11 +2414,16 @@ UndoBar.prototype.hide = function () {
 
 /* =====================  CSV の書き出し  ===================== */
 
-function openCsvDialog(csv) {
+function openCsvDialog(csv, layoutJson) {
   var back = document.getElementById('csv-modal');
   var area = document.getElementById('csv-text');
   var msg = document.getElementById('csv-msg');
   area.value = csv;
+
+  /* 場所の名前を変えたときだけ、layout.json も一緒に出す */
+  var box = document.getElementById('layout-out');
+  box.hidden = !layoutJson;
+  if (layoutJson) document.getElementById('layout-text').value = layoutJson;
   msg.textContent = '';
   back.hidden = false;
   area.focus();
@@ -2347,7 +2509,19 @@ function setupCsvDialog(getCsv) {
   });
 
   document.getElementById('csv-open').addEventListener('click', function () {
-    openCsvDialog(getCsv());
+    var got = getCsv();
+    openCsvDialog(got.csv, got.layout);
+  });
+
+  document.getElementById('layout-copy').addEventListener('click', function () {
+    var box = document.getElementById('layout-text');
+    box.focus();
+    box.select();
+    var done = false;
+    try { done = document.execCommand('copy'); } catch (e) { done = false; }
+    msg.textContent = done
+      ? 'layout.json をコピーしました。'
+      : '枠の中を全選択しました。⌘C（Windows は Ctrl+C）でコピーしてください。';
   });
 }
 
@@ -2429,7 +2603,9 @@ function loadData() {
 function main() {
   var chart = document.getElementById('view-team');
   loadData().then(function (d) {
-    var layout = d.layout;
+    var baseLayout = d.layout;          /* layout.json そのもの。id と座標はここが正 */
+    var areaNames = {};                 /* 画面で変えた表示名だけを持つ */
+    var layout = baseLayout;            /* 表示に使う（名前を差し替えたもの） */
     var originalCsv = d.csv;
 
     var shared = new SharedStore(d.share);
@@ -2438,6 +2614,8 @@ function main() {
     var store = new VariantStore(originalCsv);
     if (shared.enabled() && store.activeName === null) store.activeName = SHARED_KEY;
     var startCsv = store.currentCsv();
+    areaNames = store.currentNames();
+    layout = effectiveLayout(baseLayout, areaNames);
 
     var undoBar = new UndoBar();
 
@@ -2474,8 +2652,37 @@ function main() {
     var preview = new PreviewPane(model, layout);
     editor.watchFocus(function (row) { preview.highlight(row); });
 
+    var areaView = new AreaNamesView({
+      host: document.getElementById('area-names'),
+      onChange: function () { applyNames(); }
+    });
+    areaView.setData(baseLayout, areaNames);
+
+    /* 名前を直したら、表の「場所」欄と図の両方に反映する */
+    function applyNames() {
+      areaNames = diffNames(baseLayout, areaView.names);
+      layout = effectiveLayout(baseLayout, areaNames);
+      editor.layout = layout;
+      relabelAreaOptions();
+      refresh();
+    }
+
+    /* 表を作り直すと入力中のフォーカスが飛ぶので、選択肢の文字だけ差し替える */
+    function relabelAreaOptions() {
+      var byId = {};
+      layout.areas.forEach(function (a) { byId[a.id] = a.name; });
+      var opts = document.querySelectorAll('#edit-table select[data-f="area"] option');
+      [].slice.call(opts).forEach(function (o) {
+        if (o.value && byId[o.value]) o.textContent = byId[o.value];
+      });
+    }
+
     var variantBar = new VariantBar(store, function (csv) {
-      /* 案を切り替えたとき。表も図もその内容で作り直す。 */
+      /* 案を切り替えたとき。表も図も場所の名前も、その案の内容にする。 */
+      areaNames = store.currentNames();
+      layout = effectiveLayout(baseLayout, areaNames);
+      areaView.setData(baseLayout, areaNames);
+      editor.layout = layout;
       editor.setData(normalizeRows(parseCsv(csv)), layout);
       rerender();
       if (store.isShared()) refreshShared();
@@ -2510,7 +2717,7 @@ function main() {
     /* 編集されるたびに、同じ CSV から全ビューを作り直し、自動保存する */
     function refresh() {
       var csv = rerender();
-      variantBar.autoSave(csv);
+      variantBar.autoSave(csv, areaNames);
       if (store.isShared()) queueSharedSave();
       updateDraftBar(store);
     }
@@ -2540,7 +2747,7 @@ function main() {
       var csv = pendingCsv;
       pendingCsv = null;
       savingNow = true;
-      shared.save(csv, who()).then(function (at) {
+      shared.save(csv, areaNames, who()).then(function (at) {
         savingNow = false;
         variantBar.showShared('saved', { at: at, by: who() });
         if (pendingCsv !== null) flushSharedSave();   /* 送っている間の変更を送り直す */
@@ -2553,8 +2760,13 @@ function main() {
     }
 
     /* サーバーの内容を画面に入れる */
-    function adoptShared(csv) {
+    function adoptShared(csv, names) {
       store.sharedCsv = csv;
+      store.sharedNames = names || {};
+      areaNames = store.sharedNames;
+      layout = effectiveLayout(baseLayout, areaNames);
+      areaView.setData(baseLayout, areaNames);
+      editor.layout = layout;
       editor.setData(normalizeRows(parseCsv(csv)), layout);
       rerender();
       document.getElementById('shared-conflict').hidden = true;
@@ -2568,7 +2780,7 @@ function main() {
         var mine = toCsv(editor.rows);
         if (got.csv === mine) return;
         if (mine === (store.sharedCsv || originalCsv)) {
-          adoptShared(got.csv);                      /* 自分は何も変えていない。黙って追従。 */
+          adoptShared(got.csv, got.names);                      /* 自分は何も変えていない。黙って追従。 */
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else {
           /* 自分の編集を消さない。読み込むかどうかは本人に決めさせる。 */
@@ -2581,7 +2793,7 @@ function main() {
     }
 
     document.getElementById('shared-load').addEventListener('click', function () {
-      shared.load().then(function (got) { if (got) adoptShared(got.csv); });
+      shared.load().then(function (got) { if (got) adoptShared(got.csv, got.names); });
     });
     document.getElementById('shared-keep').addEventListener('click', function () {
       document.getElementById('shared-conflict').hidden = true;
@@ -2600,7 +2812,7 @@ function main() {
       shared.load().then(function (got) {
         if (!store.isShared()) return;
         if (got) {
-          adoptShared(got.csv);
+          adoptShared(got.csv, got.names);
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else {
           variantBar.savedMsg.textContent = 'まだ誰も編集していません';
@@ -2614,7 +2826,7 @@ function main() {
       variantBar.showShared('loading');
       shared.load().then(function (got) {
         if (got && store.isShared()) {
-          adoptShared(got.csv);
+          adoptShared(got.csv, got.names);
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else if (store.isShared()) {
           /* まだ誰も保存していない。配布時の予定がそのまま「みんなの予定」になる。 */
@@ -2638,7 +2850,13 @@ function main() {
       editor.addRow();
     });
 
-    setupCsvDialog(function () { return toCsv(editor.rows); });
+    setupCsvDialog(function () {
+      var changed = Object.keys(areaNames).length > 0;
+      return {
+        csv: toCsv(editor.rows),
+        layout: changed ? JSON.stringify(layout, null, 2) + '\n' : null
+      };
+    });
 
     document.getElementById('floor-prev').addEventListener('click', function () { floor.step(-1); });
     document.getElementById('floor-next').addEventListener('click', function () { floor.step(1); });
