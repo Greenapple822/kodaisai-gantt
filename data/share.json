@@ -1,0 +1,6 @@
+{
+  "endpoint": "https://textdb.dev/api/data/",
+  "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0",
+  "pollSeconds": 20,
+  "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"
+}

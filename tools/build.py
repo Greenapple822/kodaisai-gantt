@@ -53,11 +53,15 @@ def sub_once(pattern, replacement, text, label):
 def main():
     schedule = read(os.path.join(DATA, 'schedule.csv'))
     layout = json.loads(read(os.path.join(DATA, 'layout.json')))
+    share = {}
+    share_path = os.path.join(DATA, 'share.json')
+    if os.path.exists(share_path):          # 無くても動く。その場合は共有保存を使わない。
+        share = json.loads(read(share_path))
     css = read(os.path.join(SRC, 'style.css'))
     js = read(os.path.join(SRC, 'app.js'))
     html = read(os.path.join(SRC, 'index.html'))
 
-    payload = js_literal({'schedule': schedule, 'layout': layout})
+    payload = js_literal({'schedule': schedule, 'layout': layout, 'share': share})
 
     html = sub_once(r'<link rel="stylesheet" href="style\.css">',
                     '<style>\n' + css + '\n</style>', html, 'style.css の link')

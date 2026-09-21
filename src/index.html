@@ -30,10 +30,13 @@
 </p>
 
 <div id="draft-bar" hidden class="no-print">
-  案「<strong id="draft-name"></strong>」を表示しています。
-  <strong>案はこの端末のブラウザにだけ自動保存されます。</strong>他の部員には反映されません。
-  全員の分に反映するには「編集」タブの
-  <strong>CSVを書き出す</strong>から <code>schedule.csv</code> に貼り付けてください。
+  <span id="draft-shared" hidden><strong>みんなの予定</strong>を編集しています。
+    直すと<strong>全員の画面に反映されます</strong>。元に戻したいときは案の欄で
+    「配布時の予定」を選び直せます。</span>
+  <span id="draft-local">案「<strong id="draft-name"></strong>」を表示しています。
+    <strong>この案はこの端末のブラウザにだけ自動保存されます。</strong>他の部員には反映されません。
+    全員の分に反映するには「編集」タブの
+    <strong>CSVを書き出す</strong>から <code>schedule.csv</code> に貼り付けてください。</span>
   <span id="draft-volatile" hidden><br><strong>※ この画面では案を保存できません。
   再読み込みすると消えるので、先にCSVを書き出してください。</strong></span>
 </div>
@@ -73,7 +76,18 @@
     <input type="text" id="variant-name" aria-label="案の名前" placeholder="案の名前">
     <button type="button" id="variant-new">＋ 別の案として保存</button>
     <button type="button" id="variant-del">この案を削除</button>
+    <span id="shared-who" hidden>
+      <label for="shared-who-input">名札</label>
+      <input type="text" id="shared-who-input" placeholder="例：山田" autocomplete="off">
+    </span>
     <span class="hint" id="variant-saved"></span>
+  </div>
+
+  <div id="shared-conflict" hidden>
+    <span id="shared-conflict-msg"></span>
+    どちらを残しますか？
+    <button type="button" id="shared-load">相手の内容を読み込む</button>
+    <button type="button" id="shared-keep">自分の内容で上書き</button>
   </div>
 
   <div class="edit-bar">

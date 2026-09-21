@@ -262,6 +262,45 @@ button.primary:hover { filter: brightness(1.08); }
 .variant-bar button:disabled { color: #9aa1a9; cursor: default; }
 .variant-bar #variant-saved { margin-left: auto; color: #17456f; }
 
+#shared-who { display: inline-flex; align-items: center; gap: 5px; }
+#shared-who label { font-weight: normal; color: #17456f; }
+#shared-who input { width: 7em; }
+
+#variant-saved.shared-saving,
+#variant-saved.shared-loading { color: #5b6169; }
+#variant-saved.shared-saved { color: #1d6b34; font-weight: bold; }
+#variant-saved.shared-error,
+#variant-saved.shared-conflict,
+#variant-saved.shared-offline { color: #b91c1c; font-weight: bold; }
+
+#shared-conflict[hidden] { display: none; }
+
+#shared-conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+  border: 1px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+#shared-conflict button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--warn-line);
+  background: #fff;
+  color: var(--warn-fg);
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 .edit-bar {
   display: flex;
   flex-wrap: wrap;
@@ -662,7 +701,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   /* どのタブを開いていても、紙に出るのは班別ガント */
   #panel-team { display: block !important; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
-  .variant-bar { display: none !important; }
+  .variant-bar, #shared-conflict { display: none !important; }
 
   header { margin-bottom: 6px; }
   h1 { font-size: 14pt; }

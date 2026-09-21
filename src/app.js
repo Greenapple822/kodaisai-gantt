@@ -925,6 +925,65 @@ EditorView.prototype.addRow = function () {
   if (last) last.focus();
 };
 
+/* =====================  みんなの予定（共有保存）  ===================== */
+/* ログイン不要で読み書きできる置き場所に、CSV をそのまま預ける。
+   置き場所の設定は data/share.json。無ければこの機能ごと出さない。
+   ネットが死んでいても、ページに焼き込んだ予定で動き続けること。 */
+
+var SHARED_KEY = '__shared__';
+var SHARED_LABEL = 'みんなの予定（自動保存）';
+
+function SharedStore(cfg) {
+  this.url = (cfg && cfg.endpoint && cfg.key) ? (cfg.endpoint + cfg.key) : null;
+  this.pollMs = Math.max(5, (cfg && cfg.pollSeconds) || 20) * 1000;
+  this.remoteCsv = null;   /* 最後にサーバーで見た内容 */
+  this.at = null;
+  this.by = '';
+}
+
+SharedStore.prototype.enabled = function () { return !!this.url; };
+
+/* 中身は {csv, at, by} の JSON。素の CSV が入っていても読めるようにしておく。 */
+SharedStore.prototype.parse = function (text) {
+  if (!text || !text.trim()) return null;
+  try {
+    var o = JSON.parse(text);
+    if (o && typeof o.csv === 'string') return { csv: o.csv, at: o.at || null, by: o.by || '' };
+  } catch (e) { /* JSON でなければ素の CSV とみなす */ }
+  return { csv: text, at: null, by: '' };
+};
+
+SharedStore.prototype.load = function () {
+  var self = this;
+  if (!this.url) return Promise.resolve(null);
+  return fetch(this.url, { cache: 'no-store' }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.text();
+  }).then(function (text) {
+    var got = self.parse(text);
+    if (got) { self.remoteCsv = got.csv; self.at = got.at; self.by = got.by; }
+    return got;
+  });
+};
+
+SharedStore.prototype.save = function (csv, by) {
+  var self = this;
+  if (!this.url) return Promise.reject(new Error('共有先が設定されていません'));
+  var body = JSON.stringify({ csv: csv, at: Date.now(), by: by || '' });
+  /* text/plain にしておくと、ブラウザが事前問い合わせ(preflight)をしないで済む */
+  return fetch(this.url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: body
+  }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    self.remoteCsv = csv;
+    self.at = Date.now();
+    self.by = by || '';
+    return self.at;
+  });
+};
+
 /* =====================  案（変種）の保管  ===================== */
 /* 予定のパターンを複数持てるようにする。編集するたびに自動で保存する。
    保存先はこの端末のブラウザだけ。サーバーにもDBにも置かない。 */
@@ -989,11 +1048,15 @@ VariantStore.prototype.byName = function (name) {
 };
 
 VariantStore.prototype.active = function () {
+  if (this.activeName === SHARED_KEY) return null;   /* 共有はここでは持たない */
   return this.activeName ? this.byName(this.activeName) : null;
 };
 
-/* 今見ている内容 */
+VariantStore.prototype.isShared = function () { return this.activeName === SHARED_KEY; };
+
+/* 今見ている内容。共有を見ているときは、サーバーから来た内容（無ければ配布時の予定）。 */
 VariantStore.prototype.currentCsv = function () {
+  if (this.isShared()) return this.sharedCsv || this.base;
   var v = this.active();
   return v ? v.csv : this.base;
 };
@@ -1017,6 +1080,7 @@ VariantStore.prototype.create = function (csv, want) {
 
 /* 自動保存。配布時の予定を見たまま編集したら、新しい案を起こす。 */
 VariantStore.prototype.put = function (csv) {
+  if (this.isShared()) { this.sharedCsv = csv; return null; }
   var v = this.active();
   if (!v) {
     if (csv === this.base) return null;      /* 変えていないなら何もしない */
@@ -1029,7 +1093,8 @@ VariantStore.prototype.put = function (csv) {
 };
 
 VariantStore.prototype.setActive = function (name) {
-  this.activeName = name && this.byName(name) ? name : null;
+  if (name === SHARED_KEY) this.activeName = SHARED_KEY;
+  else this.activeName = name && this.byName(name) ? name : null;
   this.save();
 };
 
@@ -1103,7 +1168,13 @@ function VariantBar(store, onLoad) {
 VariantBar.prototype.render = function () {
   var store = this.store;
   var active = store.active();
-  var opts = ['<option value="">' + BASE_LABEL + '</option>'];
+  var isShared = store.isShared();
+  var opts = [];
+  if (this.sharedEnabled) {
+    opts.push('<option value="' + SHARED_KEY + '"' + (isShared ? ' selected' : '') + '>'
+      + SHARED_LABEL + '</option>');
+  }
+  opts.push('<option value=""' + (!isShared && !active ? ' selected' : '') + '>' + BASE_LABEL + '</option>');
   store.list.forEach(function (v) {
     opts.push('<option value="' + esc(v.name) + '"'
       + (active && v.name === active.name ? ' selected' : '') + '>' + esc(v.name) + '</option>');
@@ -1111,10 +1182,32 @@ VariantBar.prototype.render = function () {
   this.select.innerHTML = opts.join('');
   this.nameInput.value = active ? active.name : '';
   this.nameInput.disabled = !active;
-  this.nameInput.placeholder = active ? '案の名前' : '（配布時の予定）';
+  this.nameInput.placeholder = isShared ? '（みんなの予定）' : (active ? '案の名前' : '（配布時の予定）');
   document.getElementById('variant-del').disabled = !active;
-  this.showSaved(active);
+  document.getElementById('variant-new').disabled = false;
+  /* 名札は共有を編集しているときだけ意味がある */
+  document.getElementById('shared-who').hidden = !isShared;
+  if (!isShared) this.showSaved(active);
   updateDraftBar(this.store);   /* 帯に出す案の名前も合わせる */
+};
+
+/* 共有の状態をそのまま文字にする。嘘をつかないこと。 */
+VariantBar.prototype.showShared = function (state, info) {
+  var msg = {
+    loading: 'みんなの予定を読み込んでいます…',
+    saving: '保存中…',
+    saved: '全員に保存しました',
+    conflict: '他の人が更新しました',
+    error: '保存できませんでした（自動で再試行します）',
+    offline: 'つながりません。この画面の中だけで編集できます'
+  }[state] || '';
+  if (state === 'saved' && info && info.at) {
+    var d = new Date(info.at);
+    msg += ' ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2)
+      + (info.by ? '（' + info.by + '）' : '');
+  }
+  this.savedMsg.textContent = msg;
+  this.savedMsg.className = 'hint shared-' + state;
 };
 
 VariantBar.prototype.showSaved = function (v) {
@@ -1133,6 +1226,10 @@ VariantBar.prototype.flash = function (text) {
 
 /* 編集のたびに呼ばれる。保存して、選択欄の見た目を合わせる。 */
 VariantBar.prototype.autoSave = function (csv) {
+  if (this.store.isShared()) {          /* 共有の保存は main 側が受け持つ */
+    this.store.put(csv);
+    return true;
+  }
   var wasActive = this.store.activeName;
   var v = this.store.put(csv);
   if (this.store.activeName !== wasActive) this.render();   /* 案が新しくできた */
@@ -1441,13 +1538,15 @@ function loadData() {
   if (window.EMBEDDED_DATA) {
     return Promise.resolve({
       csv: window.EMBEDDED_DATA.schedule,
-      layout: window.EMBEDDED_DATA.layout
+      layout: window.EMBEDDED_DATA.layout,
+      share: window.EMBEDDED_DATA.share || null
     });
   }
   return Promise.all([
     fetch('../data/schedule.csv').then(function (r) { return r.text(); }),
-    fetch('../data/layout.json').then(function (r) { return r.json(); })
-  ]).then(function (v) { return { csv: v[0], layout: v[1] }; });
+    fetch('../data/layout.json').then(function (r) { return r.json(); }),
+    fetch('../data/share.json').then(function (r) { return r.json(); }).catch(function () { return null; })
+  ]).then(function (v) { return { csv: v[0], layout: v[1], share: v[2] }; });
 }
 
 function main() {
@@ -1456,8 +1555,11 @@ function main() {
     var layout = d.layout;
     var originalCsv = d.csv;
 
+    var shared = new SharedStore(d.share);
+
     /* この端末に保存されている案があれば、前回の続きから開く */
     var store = new VariantStore(originalCsv);
+    if (shared.enabled() && store.activeName === null) store.activeName = SHARED_KEY;
     var startCsv = store.currentCsv();
 
     var undoBar = new UndoBar();
@@ -1500,6 +1602,7 @@ function main() {
       editor.setData(normalizeRows(parseCsv(csv)), layout);
       rerender();
     });
+    variantBar.sharedEnabled = shared.enabled();
     variantBar.getCsv = function () { return toCsv(editor.rows); };
     variantBar.onRemoved = function (v, index) {
       /* 消した案を戻す：他の案の中身を上書きしないよう、案そのものを差し戻す */
@@ -1527,11 +1630,107 @@ function main() {
       return csv;
     }
 
-    /* 編集されるたびに、同じ CSV から全ビューを作り直し、案に自動保存する */
+    /* 編集されるたびに、同じ CSV から全ビューを作り直し、自動保存する */
     function refresh() {
       var csv = rerender();
       variantBar.autoSave(csv);
+      if (store.isShared()) queueSharedSave();
       updateDraftBar(store);
+    }
+
+    /* ---- みんなの予定：読み込み・保存・他の人の更新の取り込み ---- */
+
+    var saveTimer = null;
+    var savingNow = false;
+    var pendingCsv = null;
+
+    function who() {
+      try { return window.localStorage.getItem('kodaisai-gantt-who') || ''; }
+      catch (e) { return ''; }
+    }
+
+    /* 打つたびに送らない。手が止まってからまとめて送る。 */
+    function queueSharedSave() {
+      pendingCsv = toCsv(editor.rows);
+      variantBar.showShared('saving');
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(flushSharedSave, 1200);
+    }
+
+    function flushSharedSave() {
+      saveTimer = null;
+      if (savingNow || pendingCsv === null) return;
+      var csv = pendingCsv;
+      pendingCsv = null;
+      savingNow = true;
+      shared.save(csv, who()).then(function (at) {
+        savingNow = false;
+        variantBar.showShared('saved', { at: at, by: who() });
+        if (pendingCsv !== null) flushSharedSave();   /* 送っている間の変更を送り直す */
+      }, function () {
+        savingNow = false;
+        pendingCsv = csv;                              /* 捨てない。次の機会に送る。 */
+        variantBar.showShared('error');
+        if (!saveTimer) saveTimer = setTimeout(flushSharedSave, 8000);
+      });
+    }
+
+    /* サーバーの内容を画面に入れる */
+    function adoptShared(csv) {
+      store.sharedCsv = csv;
+      editor.setData(normalizeRows(parseCsv(csv)), layout);
+      rerender();
+      document.getElementById('shared-conflict').hidden = true;
+    }
+
+    function pollShared() {
+      if (!shared.enabled() || !store.isShared()) return;
+      if (savingNow || pendingCsv !== null || saveTimer) return;   /* 自分の保存が先 */
+      shared.load().then(function (got) {
+        if (!got) return;
+        var mine = toCsv(editor.rows);
+        if (got.csv === mine) return;
+        if (mine === (store.sharedCsv || originalCsv)) {
+          adoptShared(got.csv);                      /* 自分は何も変えていない。黙って追従。 */
+          variantBar.showShared('saved', { at: got.at, by: got.by });
+        } else {
+          /* 自分の編集を消さない。読み込むかどうかは本人に決めさせる。 */
+          document.getElementById('shared-conflict').hidden = false;
+          document.getElementById('shared-conflict-msg').textContent =
+            '他の人が予定を更新しました' + (got.by ? '（' + got.by + '）' : '') + '。';
+          variantBar.showShared('conflict');
+        }
+      }, function () { /* つながらないときは黙って次の周期を待つ */ });
+    }
+
+    document.getElementById('shared-load').addEventListener('click', function () {
+      shared.load().then(function (got) { if (got) adoptShared(got.csv); });
+    });
+    document.getElementById('shared-keep').addEventListener('click', function () {
+      document.getElementById('shared-conflict').hidden = true;
+      queueSharedSave();                              /* 自分の内容で上書きする */
+    });
+
+    var whoInput = document.getElementById('shared-who-input');
+    whoInput.value = who();
+    whoInput.addEventListener('change', function () {
+      try { window.localStorage.setItem('kodaisai-gantt-who', whoInput.value.trim()); } catch (e) { /* 任意なので失敗してよい */ }
+    });
+
+    if (shared.enabled()) {
+      variantBar.showShared('loading');
+      shared.load().then(function (got) {
+        if (got && store.isShared()) {
+          adoptShared(got.csv);
+          variantBar.showShared('saved', { at: got.at, by: got.by });
+        } else if (store.isShared()) {
+          /* まだ誰も保存していない。配布時の予定がそのまま「みんなの予定」になる。 */
+          variantBar.savedMsg.textContent = 'まだ誰も編集していません';
+        }
+      }, function () {
+        if (store.isShared()) variantBar.showShared('offline');
+      });
+      setInterval(pollShared, shared.pollMs);
     }
 
     /* 取り消しで戻したときは、いまの案にその内容を書き戻す */
@@ -1612,10 +1811,13 @@ function updateMeta(model, range) {
 function updateDraftBar(store) {
   var bar = document.getElementById('draft-bar');
   var v = store.active();
-  bar.hidden = !v;
+  var isShared = store.isShared();
+  bar.hidden = !v && !isShared;
+  document.getElementById('draft-local').hidden = isShared;
+  document.getElementById('draft-shared').hidden = !isShared;
   if (v) document.getElementById('draft-name').textContent = v.name;
   /* 保存が塞がれている画面（プライベートウインドウ等）では、消えることを伝える */
-  document.getElementById('draft-volatile').hidden = store.persistent;
+  document.getElementById('draft-volatile').hidden = store.persistent || isShared;
 }
 
 /* 公開ページに埋め込まれたときは DOMContentLoaded を過ぎていることがある */
