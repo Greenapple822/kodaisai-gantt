@@ -41,6 +41,11 @@
   再読み込みすると消えるので、先にCSVを書き出してください。</strong></span>
 </div>
 
+<div id="new-version" hidden class="no-print">
+  新しい版が公開されました。
+  <button type="button" id="new-version-reload">読み込み直す</button>
+</div>
+
 <div id="issues" hidden class="no-print"></div>
 
 <!-- ===== ビュー1: 班別ガント（印刷対象） ===== -->
@@ -136,8 +141,9 @@
     結ばれているので、動かしても名前を変えても、作業の割り当ては崩れません。
   </p>
   <div class="layout-bar">
-    <button type="button" id="layout-add">＋ 場所を追加</button>
+    <button type="button" id="layout-add" class="primary">＋ 場所を追加</button>
     <button type="button" id="layout-reset">配布時の会場に戻す</button>
+    <span class="hint">場所を選ぶと、右の欄で名前・位置・大きさを数字でも直せます</span>
   </div>
   <div class="layout-wrap">
     <div class="chart layout-canvas" id="layout-canvas"></div>

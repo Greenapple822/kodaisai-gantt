@@ -744,6 +744,12 @@ LayoutEditor.prototype.render = function () {
     fill: 'none', stroke: '#cfd4da', 'stroke-dasharray': '4 4'
   }, svg);
 
+  var hint = el('text', {
+    x: box.x + box.w - 8, y: box.y + box.h - 8, 'text-anchor': 'end',
+    'font-size': 11, fill: '#8a9099', 'pointer-events': 'none'
+  }, svg);
+  hint.textContent = 'ドラッグで移動／右下の■をつまんで大きさ変更';
+
   this.layout.areas.forEach(function (a) {
     var on = a.id === self.selected;
     var g = el('g', { 'data-area': a.id, class: 'la-area' + (on ? ' la-on' : '') }, svg);
@@ -764,13 +770,12 @@ LayoutEditor.prototype.render = function () {
     }, g);
     size.textContent = a.w + '×' + a.h;
 
-    if (on) {
-      /* 右下のつまみで大きさを変える */
-      el('rect', {
-        x: a.x + a.w - HANDLE, y: a.y + a.h - HANDLE, width: HANDLE, height: HANDLE,
-        fill: '#1f5ea8', rx: 2, 'data-grab': 'resize', class: 'la-handle'
-      }, g);
-    }
+    /* 右下のつまみで大きさを変える。選ぶ前から見えていないと気づかれないので、
+       すべての場所に出して、選んでいるものだけ濃くする。 */
+    el('rect', {
+      x: a.x + a.w - HANDLE, y: a.y + a.h - HANDLE, width: HANDLE, height: HANDLE,
+      fill: on ? '#1f5ea8' : '#9fb4cc', rx: 2, 'data-grab': 'resize', class: 'la-handle'
+    }, g);
   });
 
   this.bind();
@@ -1891,6 +1896,39 @@ function setupTabs(onShow) {
   show('team');
 }
 
+/* =====================  新しい版のお知らせ  ===================== */
+/* GitHub Pages はページを最大10分キャッシュする。古い画面を見たまま
+   「その機能が無い」と思われないよう、新しい版が出たら知らせる。 */
+
+function watchForNewVersion(myBuild) {
+  if (!myBuild || !window.fetch || location.protocol === 'file:') return;
+  var last = 0;
+
+  function check() {
+    var now = Date.now();
+    if (now - last < 5 * 60 * 1000) return;     /* 5分に1回まで */
+    last = now;
+    fetch(location.pathname + '?v=' + now, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (text) {
+        if (!text) return;
+        var m = /"build":\s*"([^"]+)"/.exec(text);
+        if (m && m[1] && m[1] !== myBuild) {
+          document.getElementById('new-version').hidden = false;
+        }
+      }, function () { /* つながらないときは黙っている */ });
+  }
+
+  document.getElementById('new-version-reload').addEventListener('click', function () {
+    location.reload();
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) check();
+  });
+  setTimeout(check, 30000);
+  setInterval(check, 10 * 60 * 1000);
+}
+
 /* =====================  読み込み  ===================== */
 /* dist/index.html では build.py が window.EMBEDDED_DATA を埋め込む。
    開発中（src/ を http.server で開く）だけ fetch する。 */
@@ -1900,7 +1938,8 @@ function loadData() {
     return Promise.resolve({
       csv: window.EMBEDDED_DATA.schedule,
       layout: window.EMBEDDED_DATA.layout,
-      share: window.EMBEDDED_DATA.share || null
+      share: window.EMBEDDED_DATA.share || null,
+      build: window.EMBEDDED_DATA.build || null
     });
   }
   return Promise.all([
@@ -1919,6 +1958,7 @@ function main() {
     var originalCsv = d.csv;
 
     var shared = new SharedStore(d.share);
+    watchForNewVersion(d.build);
 
     /* この端末に保存されている案があれば、前回の続きから開く */
     var store = new VariantStore(originalCsv);

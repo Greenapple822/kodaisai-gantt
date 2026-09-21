@@ -621,7 +621,8 @@ button.primary:hover { filter: brightness(1.08); }
   margin: 18px 0 8px;
 }
 
-.layout-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.layout-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.layout-bar button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 
 .layout-bar button {
   font: inherit;
@@ -804,6 +805,34 @@ button.primary:hover { filter: brightness(1.08); }
 
 .modal-ops button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 
+#new-version[hidden] { display: none; }
+
+#new-version {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 1px solid #1d6b34;
+  background: #e8f0e9;
+  color: #14532d;
+  border-radius: 6px;
+  padding: 9px 12px;
+  margin: 12px 0;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+#new-version button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  border: 1px solid #1d6b34;
+  background: #fff;
+  color: #14532d;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
 /* ---------- 警告 ---------- */
 
 #issues {
@@ -847,7 +876,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   /* どのタブを開いていても、紙に出るのは班別ガント */
   #panel-team { display: block !important; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
-  .variant-bar, #shared-conflict { display: none !important; }
+  .variant-bar, #shared-conflict, #new-version { display: none !important; }
 
   header { margin-bottom: 6px; }
   h1 { font-size: 14pt; }
@@ -900,6 +929,11 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     <strong>CSVを書き出す</strong>から <code>schedule.csv</code> に貼り付けてください。</span>
   <span id="draft-volatile" hidden><br><strong>※ この画面では案を保存できません。
   再読み込みすると消えるので、先にCSVを書き出してください。</strong></span>
+</div>
+
+<div id="new-version" hidden class="no-print">
+  新しい版が公開されました。
+  <button type="button" id="new-version-reload">読み込み直す</button>
 </div>
 
 <div id="issues" hidden class="no-print"></div>
@@ -997,8 +1031,9 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     結ばれているので、動かしても名前を変えても、作業の割り当ては崩れません。
   </p>
   <div class="layout-bar">
-    <button type="button" id="layout-add">＋ 場所を追加</button>
+    <button type="button" id="layout-add" class="primary">＋ 場所を追加</button>
     <button type="button" id="layout-reset">配布時の会場に戻す</button>
+    <span class="hint">場所を選ぶと、右の欄で名前・位置・大きさを数字でも直せます</span>
   </div>
   <div class="layout-wrap">
     <div class="chart layout-canvas" id="layout-canvas"></div>
@@ -1049,7 +1084,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
 </div>
 
 <script>
-window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}};
+window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}, "build": "20260921-233219"};
 </script>
 <script>
 'use strict';
@@ -1798,6 +1833,12 @@ LayoutEditor.prototype.render = function () {
     fill: 'none', stroke: '#cfd4da', 'stroke-dasharray': '4 4'
   }, svg);
 
+  var hint = el('text', {
+    x: box.x + box.w - 8, y: box.y + box.h - 8, 'text-anchor': 'end',
+    'font-size': 11, fill: '#8a9099', 'pointer-events': 'none'
+  }, svg);
+  hint.textContent = 'ドラッグで移動／右下の■をつまんで大きさ変更';
+
   this.layout.areas.forEach(function (a) {
     var on = a.id === self.selected;
     var g = el('g', { 'data-area': a.id, class: 'la-area' + (on ? ' la-on' : '') }, svg);
@@ -1818,13 +1859,12 @@ LayoutEditor.prototype.render = function () {
     }, g);
     size.textContent = a.w + '×' + a.h;
 
-    if (on) {
-      /* 右下のつまみで大きさを変える */
-      el('rect', {
-        x: a.x + a.w - HANDLE, y: a.y + a.h - HANDLE, width: HANDLE, height: HANDLE,
-        fill: '#1f5ea8', rx: 2, 'data-grab': 'resize', class: 'la-handle'
-      }, g);
-    }
+    /* 右下のつまみで大きさを変える。選ぶ前から見えていないと気づかれないので、
+       すべての場所に出して、選んでいるものだけ濃くする。 */
+    el('rect', {
+      x: a.x + a.w - HANDLE, y: a.y + a.h - HANDLE, width: HANDLE, height: HANDLE,
+      fill: on ? '#1f5ea8' : '#9fb4cc', rx: 2, 'data-grab': 'resize', class: 'la-handle'
+    }, g);
   });
 
   this.bind();
@@ -2945,6 +2985,39 @@ function setupTabs(onShow) {
   show('team');
 }
 
+/* =====================  新しい版のお知らせ  ===================== */
+/* GitHub Pages はページを最大10分キャッシュする。古い画面を見たまま
+   「その機能が無い」と思われないよう、新しい版が出たら知らせる。 */
+
+function watchForNewVersion(myBuild) {
+  if (!myBuild || !window.fetch || location.protocol === 'file:') return;
+  var last = 0;
+
+  function check() {
+    var now = Date.now();
+    if (now - last < 5 * 60 * 1000) return;     /* 5分に1回まで */
+    last = now;
+    fetch(location.pathname + '?v=' + now, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (text) {
+        if (!text) return;
+        var m = /"build":\s*"([^"]+)"/.exec(text);
+        if (m && m[1] && m[1] !== myBuild) {
+          document.getElementById('new-version').hidden = false;
+        }
+      }, function () { /* つながらないときは黙っている */ });
+  }
+
+  document.getElementById('new-version-reload').addEventListener('click', function () {
+    location.reload();
+  });
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) check();
+  });
+  setTimeout(check, 30000);
+  setInterval(check, 10 * 60 * 1000);
+}
+
 /* =====================  読み込み  ===================== */
 /* dist/index.html では build.py が window.EMBEDDED_DATA を埋め込む。
    開発中（src/ を http.server で開く）だけ fetch する。 */
@@ -2954,7 +3027,8 @@ function loadData() {
     return Promise.resolve({
       csv: window.EMBEDDED_DATA.schedule,
       layout: window.EMBEDDED_DATA.layout,
-      share: window.EMBEDDED_DATA.share || null
+      share: window.EMBEDDED_DATA.share || null,
+      build: window.EMBEDDED_DATA.build || null
     });
   }
   return Promise.all([
@@ -2973,6 +3047,7 @@ function main() {
     var originalCsv = d.csv;
 
     var shared = new SharedStore(d.share);
+    watchForNewVersion(d.build);
 
     /* この端末に保存されている案があれば、前回の続きから開く */
     var store = new VariantStore(originalCsv);

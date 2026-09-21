@@ -61,7 +61,10 @@ def main():
     js = read(os.path.join(SRC, 'app.js'))
     html = read(os.path.join(SRC, 'index.html'))
 
-    payload = js_literal({'schedule': schedule, 'layout': layout, 'share': share})
+    # 新しい版が出たことを画面が気づくための印
+    build_id = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    payload = js_literal({'schedule': schedule, 'layout': layout, 'share': share,
+                          'build': build_id})
 
     html = sub_once(r'<link rel="stylesheet" href="style\.css">',
                     '<style>\n' + css + '\n</style>', html, 'style.css の link')

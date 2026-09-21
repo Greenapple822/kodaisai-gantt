@@ -614,7 +614,8 @@ button.primary:hover { filter: brightness(1.08); }
   margin: 18px 0 8px;
 }
 
-.layout-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.layout-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.layout-bar button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 
 .layout-bar button {
   font: inherit;
@@ -797,6 +798,34 @@ button.primary:hover { filter: brightness(1.08); }
 
 .modal-ops button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 
+#new-version[hidden] { display: none; }
+
+#new-version {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  border: 1px solid #1d6b34;
+  background: #e8f0e9;
+  color: #14532d;
+  border-radius: 6px;
+  padding: 9px 12px;
+  margin: 12px 0;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+#new-version button {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 12px;
+  border: 1px solid #1d6b34;
+  background: #fff;
+  color: #14532d;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
 /* ---------- 警告 ---------- */
 
 #issues {
@@ -840,7 +869,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   /* どのタブを開いていても、紙に出るのは班別ガント */
   #panel-team { display: block !important; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
-  .variant-bar, #shared-conflict { display: none !important; }
+  .variant-bar, #shared-conflict, #new-version { display: none !important; }
 
   header { margin-bottom: 6px; }
   h1 { font-size: 14pt; }
