@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工大祭 設営ガントチャート</title>
+<link rel="stylesheet" href="style.css">
+<!-- BUILD:STYLE -->
+</head>
+<body>
+
+<header>
+  <h1>工大祭 設営ガントチャート</h1>
+  <p class="subtitle">データ：<code>data/schedule.csv</code>　<span id="meta"></span></p>
+  <p class="print-only" id="print-stamp"></p>
+</header>
+
+<div class="toolbar no-print">
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" data-view="team" aria-selected="true">ビュー1　班別ガント</button>
+    <button type="button" role="tab" data-view="floor" aria-selected="false">ビュー3　平面図タイムライン</button>
+    <button type="button" role="tab" data-view="edit" aria-selected="false">編集</button>
+  </div>
+  <button type="button" id="print-btn" class="primary">PDFで書き出す（A4横）</button>
+</div>
+
+<p id="print-hint" hidden class="no-print">
+  印刷画面が開かなかったようです。ブラウザのメニューから印刷（<kbd>⌘P</kbd> / <kbd>Ctrl+P</kbd>）を選んでください。
+  用紙は「A4・横」、送信先で「PDFに保存」を選びます。
+</p>
+
+<div id="draft-bar" hidden class="no-print">
+  案「<strong id="draft-name"></strong>」を表示しています。
+  <strong>案はこの端末のブラウザにだけ自動保存されます。</strong>他の部員には反映されません。
+  全員の分に反映するには「編集」タブの
+  <strong>CSVを書き出す</strong>から <code>schedule.csv</code> に貼り付けてください。
+  <span id="draft-volatile" hidden><br><strong>※ この画面では案を保存できません。
+  再読み込みすると消えるので、先にCSVを書き出してください。</strong></span>
+</div>
+
+<div id="issues" hidden class="no-print"></div>
+
+<!-- ===== ビュー1: 班別ガント（印刷対象） ===== -->
+<section id="panel-team">
+  <div class="legend" id="legend"></div>
+  <div class="chart">
+    <div id="view-team"></div>
+  </div>
+</section>
+
+<!-- ===== ビュー3: 平面図タイムライン（画面専用） ===== -->
+<section id="panel-floor" hidden class="no-print">
+  <div class="floor-controls">
+    <button type="button" id="floor-play" aria-pressed="false">▶ 再生</button>
+    <button type="button" id="floor-prev" aria-label="15分戻す">◀</button>
+    <output id="floor-clock">--:--</output>
+    <button type="button" id="floor-next" aria-label="15分進める">▶</button>
+    <input type="range" id="floor-slider" aria-label="時刻（15分刻み）">
+    <span class="hint">← → キーでも動かせます</span>
+  </div>
+  <div class="legend" id="legend-floor"></div>
+  <div class="floor-wrap">
+    <div class="chart floor-chart"><div id="view-floor"></div></div>
+    <aside class="floor-now" id="floor-now"></aside>
+  </div>
+</section>
+
+<!-- ===== 編集（画面専用） ===== -->
+<section id="panel-edit" hidden class="no-print">
+  <div class="variant-bar">
+    <label for="variant-select">案</label>
+    <select id="variant-select"></select>
+    <input type="text" id="variant-name" aria-label="案の名前" placeholder="案の名前">
+    <button type="button" id="variant-new">＋ 別の案として保存</button>
+    <button type="button" id="variant-del">この案を削除</button>
+    <span class="hint" id="variant-saved"></span>
+  </div>
+
+  <div class="edit-bar">
+    <button type="button" id="edit-add" class="primary">＋ 作業を追加</button>
+    <button type="button" id="csv-open">CSVを書き出す</button>
+    <span class="hint" id="edit-count"></span>
+  </div>
+  <div class="preview" id="edit-preview">
+    <div class="preview-head">
+      <strong class="preview-title">プレビュー</strong>
+      <div class="preview-tabs" role="tablist">
+        <button type="button" role="tab" data-prev="both" aria-selected="true">両方</button>
+        <button type="button" role="tab" data-prev="team" aria-selected="false">班別ガント</button>
+        <button type="button" role="tab" data-prev="floor" aria-selected="false">平面図</button>
+      </div>
+      <button type="button" id="preview-toggle" aria-expanded="true">折りたたむ</button>
+    </div>
+    <div class="preview-body" id="preview-body">
+      <div class="chart" id="prev-team-wrap"><div id="prev-team"></div></div>
+      <div id="prev-floor-wrap" hidden>
+        <div class="floor-controls compact">
+          <button type="button" id="prev-play" aria-pressed="false">▶ 再生</button>
+          <button type="button" id="prev-prev" aria-label="15分戻す">◀</button>
+          <output id="prev-clock">--:--</output>
+          <button type="button" id="prev-next" aria-label="15分進める">▶</button>
+          <input type="range" id="prev-slider" aria-label="プレビューの時刻（15分刻み）">
+        </div>
+        <div class="chart floor-chart"><div id="prev-floor"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="edit-help">
+    直すとすぐ上のプレビューに反映されます。
+    行を選ぶと、その作業がプレビューで強調されます。
+    <strong>種別</strong>が「マイルストーン」の行は終了時刻を持ちません（開始に揃います）。
+    <strong>前提</strong>には先に終わっている必要がある作業のIDを <code>,</code> 区切りで、
+    <strong>担当</strong>は複数なら <code>・</code> 区切りで書きます。
+  </p>
+  <div class="edit-scroll" id="edit-table"></div>
+</section>
+
+<footer class="no-print">
+  <code>data/schedule.csv</code> / <code>data/layout.json</code> を直したら
+  <code>python3 tools/build.py</code> で <code>dist/index.html</code> を作り直してください。
+</footer>
+
+<!-- 取り消しバー -->
+<div id="undo-bar" hidden class="no-print">
+  <span id="undo-msg"></span>
+  <button type="button" id="undo-btn">元に戻す</button>
+  <button type="button" id="undo-close" aria-label="閉じる">×</button>
+</div>
+
+<!-- CSV 書き出しダイアログ -->
+<div id="csv-modal" hidden class="no-print">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="csv-title">
+    <h2 id="csv-title">CSVを書き出す</h2>
+    <p>この内容を <code>data/schedule.csv</code> にまるごと貼り付けて、
+      <code>python3 tools/build.py</code> を実行すると、全員の分に反映されます。</p>
+    <textarea id="csv-text" spellcheck="false" aria-label="書き出したCSV"></textarea>
+    <p id="csv-msg" class="csv-msg" role="status"></p>
+    <div class="modal-ops">
+      <button type="button" id="csv-copy" class="primary">コピー</button>
+      <button type="button" id="csv-download">ダウンロード</button>
+      <button type="button" id="csv-close">閉じる</button>
+    </div>
+    <p class="hint">共有リンクで開いた場合、保存するときに確認が出ます。
+      保存ボタンが出ていない画面では「コピー」を使ってください。</p>
+  </div>
+</div>
+
+<script>
+/* BUILD:DATA_START */
+window.EMBEDDED_DATA = null;
+/* BUILD:DATA_END */
+</script>
+<script src="app.js"></script>
+<!-- BUILD:SCRIPT -->
+</body>
+</html>
