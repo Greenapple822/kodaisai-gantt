@@ -2524,6 +2524,9 @@ function main() {
           + esc(fmtDate(dt)) + '</button>';
       }).join('');
       var info = renderShiftTable(sh, shiftDate, document.getElementById('view-shift'));
+      /* 紙に出したとき、どの日のシフトか分かるようにする */
+      document.getElementById('shift-print-title').textContent =
+        '本番シフト　' + fmtDate(shiftDate) + '　多目的ホールステージ';
       var n = sh.items.filter(function (i) {
         return i.kind === 'shift' && i.date === shiftDate;
       });

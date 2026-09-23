@@ -918,6 +918,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   }
 
   #panel-shift .legend { margin-top: 0; }
+  .shift-print-title { display: block !important; font-size: 13pt; margin: 0 0 4px; }
   #view-shift svg { min-width: 0 !important; width: 100% !important; height: auto !important; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
   .variant-bar, #shared-conflict, #new-version { display: none !important; }
