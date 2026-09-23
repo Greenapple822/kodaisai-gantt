@@ -2917,7 +2917,13 @@ function main() {
     /* 共有ページでは印刷ダイアログがブラウザに止められることがある。
        beforeprint が来なければ、開かなかったとみなして案内を出す。 */
     var printOpened = false;
-    window.addEventListener('beforeprint', function () { printOpened = true; });
+    /* ボタンを使わず ⌘P で印刷されることもある。その場合もシフトが抜けないよう、
+       印刷の直前に必ず組み立てておく。 */
+    document.body.setAttribute('data-print', 'all');
+    window.addEventListener('beforeprint', function () {
+      printOpened = true;
+      if (document.body.getAttribute('data-print') !== 'gantt') buildPrintShifts();
+    });
     document.getElementById('print-btn').addEventListener('click', function () {
       doPrint(document.getElementById('print-what').value);
     });
