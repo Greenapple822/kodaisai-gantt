@@ -22,7 +22,15 @@
     <button type="button" role="tab" data-view="shift" aria-selected="false">本番シフト</button>
     <button type="button" role="tab" data-view="edit" aria-selected="false">編集</button>
   </div>
-  <button type="button" id="print-btn" class="primary">PDFで書き出す（A4横）</button>
+  <div class="print-group">
+    <label for="print-what" class="hint">紙に出すもの</label>
+    <select id="print-what">
+      <option value="all">全部（ガント＋シフト）</option>
+      <option value="gantt">班別ガントだけ</option>
+      <option value="shift">本番シフトだけ</option>
+    </select>
+    <button type="button" id="print-btn" class="primary">PDFで書き出す（A4横）</button>
+  </div>
 </div>
 
 <p id="print-hint" hidden class="no-print">
@@ -80,6 +88,7 @@
   <div class="shift-bar no-print">
     <span class="shift-label">本番日</span>
     <div class="shift-days" id="shift-days" role="tablist"></div>
+    <button type="button" id="shift-print">この2日分をPDFで書き出す</button>
     <span class="hint" id="shift-meta"></span>
   </div>
   <div class="legend" id="legend-shift"></div>
@@ -89,6 +98,9 @@
     バーにカーソルを乗せると備考が出ます。担当は「編集」タブの<strong>シフト</strong>表で直せます。
   </p>
 </section>
+
+<!-- 印刷専用：シフトを日ごとに1枚ずつ出す（画面には出さない） -->
+<div id="print-shifts" aria-hidden="true"></div>
 
 <!-- ===== 編集（画面専用） ===== -->
 <section id="panel-edit" hidden class="no-print">

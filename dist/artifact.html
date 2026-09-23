@@ -232,6 +232,31 @@ button.primary:hover { filter: brightness(1.08); }
 .res-list li { padding: 6px 0; border-top: 1px solid var(--line); }
 .empty { color: var(--fg-sub); margin: 4px 0; }
 
+#print-shifts { display: none; }
+
+.print-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.print-group select {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.shift-bar #shift-print {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid var(--accent);
+  background: #fff;
+  color: var(--accent);
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 /* ---------- 本番シフト ---------- */
 
 .shift-bar {
@@ -974,17 +999,31 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   .no-print { display: none !important; }
   .print-only { display: block !important; font-size: 9pt; color: #555; margin: 2px 0 0; }
 
-  /* どのタブを開いていても、紙に出るのは 1枚目=班別ガント / 2枚目=選んだ日のシフト表 */
+  /* 紙に出すものは、ツールバーの「紙に出すもの」で決める。
+     既定は 1枚目=班別ガント、2枚目以降=本番シフト（日ごとに1枚）。 */
   #panel-team { display: block !important; }
+  #panel-shift { display: none !important; }
 
-  #panel-shift {
-    display: block !important;
+  #print-shifts { display: block !important; }
+
+  .print-shift-day {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* ガントの次から改ページ。シフトだけのときは1枚目から始める。 */
+  body[data-print="all"] .print-shift-day,
+  .print-shift-day + .print-shift-day {
     break-before: page;
     page-break-before: always;
   }
 
-  #panel-shift .legend { margin-top: 0; }
-  .shift-print-title { display: block !important; font-size: 13pt; margin: 0 0 4px; }
+  body[data-print="gantt"] #print-shifts { display: none !important; }
+  body[data-print="shift"] #panel-team { display: none !important; }
+  body[data-print="shift"] header .subtitle { display: none; }
+
+  .shift-print-title { display: block !important; font-size: 13pt; margin: 0 0 6px; }
+  .print-shift-day .chart { border: none; overflow: visible; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
   .variant-bar, #shared-conflict, #new-version { display: none !important; }
 
@@ -1001,7 +1040,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   }
 
   /* 画面用の最小幅と、拡大を抑えるための上限を外し、A4 の紙幅ぴったりに合わせる */
-  #view-team svg, #view-shift svg {
+  #view-team svg, #print-shifts svg {
     min-width: 0 !important;
     max-width: none !important;
     width: 100% !important;
@@ -1023,7 +1062,15 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     <button type="button" role="tab" data-view="shift" aria-selected="false">本番シフト</button>
     <button type="button" role="tab" data-view="edit" aria-selected="false">編集</button>
   </div>
-  <button type="button" id="print-btn" class="primary">PDFで書き出す（A4横）</button>
+  <div class="print-group">
+    <label for="print-what" class="hint">紙に出すもの</label>
+    <select id="print-what">
+      <option value="all">全部（ガント＋シフト）</option>
+      <option value="gantt">班別ガントだけ</option>
+      <option value="shift">本番シフトだけ</option>
+    </select>
+    <button type="button" id="print-btn" class="primary">PDFで書き出す（A4横）</button>
+  </div>
 </div>
 
 <p id="print-hint" hidden class="no-print">
@@ -1081,6 +1128,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   <div class="shift-bar no-print">
     <span class="shift-label">本番日</span>
     <div class="shift-days" id="shift-days" role="tablist"></div>
+    <button type="button" id="shift-print">この2日分をPDFで書き出す</button>
     <span class="hint" id="shift-meta"></span>
   </div>
   <div class="legend" id="legend-shift"></div>
@@ -1090,6 +1138,9 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     バーにカーソルを乗せると備考が出ます。担当は「編集」タブの<strong>シフト</strong>表で直せます。
   </p>
 </section>
+
+<!-- 印刷専用：シフトを日ごとに1枚ずつ出す（画面には出さない） -->
+<div id="print-shifts" aria-hidden="true"></div>
 
 <!-- ===== 編集（画面専用） ===== -->
 <section id="panel-edit" hidden class="no-print">
@@ -1247,7 +1298,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
 </div>
 
 <script>
-window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}, "shifts": "date,team,person,role,start,end,note,kind\n2026-10-17,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-17,全班,,工大祭コンサート,14:00,15:30,企画①,program\n2026-10-17,音響,山田,仕込み,09:30,12:00,,\n2026-10-17,音響,山田,音響卓,12:30,16:30,,\n2026-10-17,音響,中村,仕込み,09:30,12:00,,\n2026-10-17,音響,中村,モニター,12:30,16:30,,\n2026-10-17,音響,伊藤,マイク・ワイヤレス,12:30,16:00,電池は予備を持つ,\n2026-10-17,映像,小林,仕込み,09:30,12:00,,\n2026-10-17,映像,小林,スイッチャー,12:30,16:30,,\n2026-10-17,映像,加藤,仕込み,09:30,12:00,,\n2026-10-17,映像,加藤,カメラ（上手）,12:30,16:00,,\n2026-10-17,映像,吉田,カメラ（下手）,12:30,16:00,,\n2026-10-17,照明,佐藤,仕込み,09:30,12:00,,\n2026-10-17,照明,佐藤,調光卓,12:30,16:30,,\n2026-10-17,照明,鈴木,仕込み,09:30,12:00,,\n2026-10-17,照明,鈴木,フォロー,13:30,16:00,,\n2026-10-17,照明,高橋,舞台周り,09:30,16:30,,\n2026-10-17,全班,渡辺,進行・インカム,09:30,16:30,実行委との窓口,\n2026-10-18,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-18,全班,,このレジスタにより,14:00,15:30,企画②,program\n2026-10-18,全班,,サテライト,16:00,18:00,企画③,program\n2026-10-18,音響,山田,点検・立ち上げ,09:30,10:30,,\n2026-10-18,音響,山田,音響卓,10:30,18:30,,\n2026-10-18,音響,中村,モニター,10:30,18:30,,\n2026-10-18,音響,伊藤,マイク・ワイヤレス,13:00,18:00,,\n2026-10-18,映像,小林,点検・立ち上げ,09:30,10:30,,\n2026-10-18,映像,小林,スイッチャー,10:30,18:30,,\n2026-10-18,映像,加藤,カメラ（上手）,13:00,18:00,,\n2026-10-18,映像,吉田,カメラ（下手）,13:00,18:00,,\n2026-10-18,照明,佐藤,点検・立ち上げ,09:30,10:30,,\n2026-10-18,照明,佐藤,調光卓,10:30,18:30,,\n2026-10-18,照明,鈴木,フォロー,13:00,18:00,,\n2026-10-18,照明,高橋,舞台周り,09:30,18:30,,\n2026-10-18,全班,渡辺,進行・インカム,09:30,18:30,実行委との窓口,\n", "build": "20260924-003215"};
+window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}, "shifts": "date,team,person,role,start,end,note,kind\n2026-10-17,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-17,全班,,工大祭コンサート,14:00,15:30,企画①,program\n2026-10-17,音響,山田,仕込み,09:30,12:00,,\n2026-10-17,音響,山田,音響卓,12:30,16:30,,\n2026-10-17,音響,中村,仕込み,09:30,12:00,,\n2026-10-17,音響,中村,モニター,12:30,16:30,,\n2026-10-17,音響,伊藤,マイク・ワイヤレス,12:30,16:00,電池は予備を持つ,\n2026-10-17,映像,小林,仕込み,09:30,12:00,,\n2026-10-17,映像,小林,スイッチャー,12:30,16:30,,\n2026-10-17,映像,加藤,仕込み,09:30,12:00,,\n2026-10-17,映像,加藤,カメラ（上手）,12:30,16:00,,\n2026-10-17,映像,吉田,カメラ（下手）,12:30,16:00,,\n2026-10-17,照明,佐藤,仕込み,09:30,12:00,,\n2026-10-17,照明,佐藤,調光卓,12:30,16:30,,\n2026-10-17,照明,鈴木,仕込み,09:30,12:00,,\n2026-10-17,照明,鈴木,フォロー,13:30,16:00,,\n2026-10-17,照明,高橋,舞台周り,09:30,16:30,,\n2026-10-17,全班,渡辺,進行・インカム,09:30,16:30,実行委との窓口,\n2026-10-18,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-18,全班,,このレジスタにより,14:00,15:30,企画②,program\n2026-10-18,全班,,サテライト,16:00,18:00,企画③,program\n2026-10-18,音響,山田,点検・立ち上げ,09:30,10:30,,\n2026-10-18,音響,山田,音響卓,10:30,18:30,,\n2026-10-18,音響,中村,モニター,10:30,18:30,,\n2026-10-18,音響,伊藤,マイク・ワイヤレス,13:00,18:00,,\n2026-10-18,映像,小林,点検・立ち上げ,09:30,10:30,,\n2026-10-18,映像,小林,スイッチャー,10:30,18:30,,\n2026-10-18,映像,加藤,カメラ（上手）,13:00,18:00,,\n2026-10-18,映像,吉田,カメラ（下手）,13:00,18:00,,\n2026-10-18,照明,佐藤,点検・立ち上げ,09:30,10:30,,\n2026-10-18,照明,佐藤,調光卓,10:30,18:30,,\n2026-10-18,照明,鈴木,フォロー,13:00,18:00,,\n2026-10-18,照明,高橋,舞台周り,09:30,18:30,,\n2026-10-18,全班,渡辺,進行・インカム,09:30,18:30,実行委との窓口,\n", "build": "20260924-004049"};
 </script>
 <script>
 'use strict';
@@ -4127,18 +4178,51 @@ function main() {
     });
 
     /* 印刷は常に班別ガント1枚。他のタブを開いていても同じものが出る。 */
-    /* 共有ページでは印刷ダイアログがブラウザに止められることがある。
-       beforeprint が来なければ、開かなかったとみなして案内を出す。 */
-    var printOpened = false;
-    window.addEventListener('beforeprint', function () { printOpened = true; });
-    document.getElementById('print-btn').addEventListener('click', function () {
+    /* 紙に出す直前に、全部の日のシフト表を作る。
+       画面は1日ずつしか出さないので、印刷用は別に組み立てる。 */
+    function buildPrintShifts() {
+      var host = document.getElementById('print-shifts');
+      host.innerHTML = '';
+      var sh = buildShifts(shiftsToCsv(shiftEditor.rows));
+      sh.dates.forEach(function (dt) {
+        var sec = document.createElement('section');
+        sec.className = 'print-shift-day';
+        var h = document.createElement('h2');
+        h.className = 'shift-print-title';
+        h.textContent = '本番シフト　' + fmtDate(dt) + '　多目的ホールステージ';
+        sec.appendChild(h);
+        var box = document.createElement('div');
+        box.className = 'chart';
+        sec.appendChild(box);
+        host.appendChild(sec);
+        renderShiftTable(sh, dt, box);      /* 表示された状態で描く＝文字幅が測れる */
+      });
+      return sh.dates.length;
+    }
+
+    function doPrint(what) {
       floor.pause();
       preview.pause();
+      document.body.setAttribute('data-print', what || 'all');
+      if (what !== 'gantt') buildPrintShifts();
       printOpened = false;
       var hint = document.getElementById('print-hint');
       hint.hidden = true;
       try { window.print(); } catch (e) { /* 案内に回す */ }
       setTimeout(function () { if (!printOpened) hint.hidden = false; }, 500);
+    }
+
+    document.getElementById('shift-print').addEventListener('click', function () {
+      document.getElementById('print-what').value = 'shift';
+      doPrint('shift');
+    });
+
+    /* 共有ページでは印刷ダイアログがブラウザに止められることがある。
+       beforeprint が来なければ、開かなかったとみなして案内を出す。 */
+    var printOpened = false;
+    window.addEventListener('beforeprint', function () { printOpened = true; });
+    document.getElementById('print-btn').addEventListener('click', function () {
+      doPrint(document.getElementById('print-what').value);
     });
     document.getElementById('print-stamp').textContent =
       '出力：' + new Date().toLocaleString('ja-JP', {

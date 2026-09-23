@@ -230,6 +230,31 @@ button.primary:hover { filter: brightness(1.08); }
 .res-list li { padding: 6px 0; border-top: 1px solid var(--line); }
 .empty { color: var(--fg-sub); margin: 4px 0; }
 
+#print-shifts { display: none; }
+
+.print-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.print-group select {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.shift-bar #shift-print {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 12px;
+  border: 1px solid var(--accent);
+  background: #fff;
+  color: var(--accent);
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
 /* ---------- 本番シフト ---------- */
 
 .shift-bar {
@@ -972,17 +997,31 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   .no-print { display: none !important; }
   .print-only { display: block !important; font-size: 9pt; color: #555; margin: 2px 0 0; }
 
-  /* どのタブを開いていても、紙に出るのは 1枚目=班別ガント / 2枚目=選んだ日のシフト表 */
+  /* 紙に出すものは、ツールバーの「紙に出すもの」で決める。
+     既定は 1枚目=班別ガント、2枚目以降=本番シフト（日ごとに1枚）。 */
   #panel-team { display: block !important; }
+  #panel-shift { display: none !important; }
 
-  #panel-shift {
-    display: block !important;
+  #print-shifts { display: block !important; }
+
+  .print-shift-day {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* ガントの次から改ページ。シフトだけのときは1枚目から始める。 */
+  body[data-print="all"] .print-shift-day,
+  .print-shift-day + .print-shift-day {
     break-before: page;
     page-break-before: always;
   }
 
-  #panel-shift .legend { margin-top: 0; }
-  .shift-print-title { display: block !important; font-size: 13pt; margin: 0 0 4px; }
+  body[data-print="gantt"] #print-shifts { display: none !important; }
+  body[data-print="shift"] #panel-team { display: none !important; }
+  body[data-print="shift"] header .subtitle { display: none; }
+
+  .shift-print-title { display: block !important; font-size: 13pt; margin: 0 0 6px; }
+  .print-shift-day .chart { border: none; overflow: visible; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
   .variant-bar, #shared-conflict, #new-version { display: none !important; }
 
@@ -999,7 +1038,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   }
 
   /* 画面用の最小幅と、拡大を抑えるための上限を外し、A4 の紙幅ぴったりに合わせる */
-  #view-team svg, #view-shift svg {
+  #view-team svg, #print-shifts svg {
     min-width: 0 !important;
     max-width: none !important;
     width: 100% !important;

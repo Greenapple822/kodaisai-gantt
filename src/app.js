@@ -2875,18 +2875,51 @@ function main() {
     });
 
     /* 印刷は常に班別ガント1枚。他のタブを開いていても同じものが出る。 */
-    /* 共有ページでは印刷ダイアログがブラウザに止められることがある。
-       beforeprint が来なければ、開かなかったとみなして案内を出す。 */
-    var printOpened = false;
-    window.addEventListener('beforeprint', function () { printOpened = true; });
-    document.getElementById('print-btn').addEventListener('click', function () {
+    /* 紙に出す直前に、全部の日のシフト表を作る。
+       画面は1日ずつしか出さないので、印刷用は別に組み立てる。 */
+    function buildPrintShifts() {
+      var host = document.getElementById('print-shifts');
+      host.innerHTML = '';
+      var sh = buildShifts(shiftsToCsv(shiftEditor.rows));
+      sh.dates.forEach(function (dt) {
+        var sec = document.createElement('section');
+        sec.className = 'print-shift-day';
+        var h = document.createElement('h2');
+        h.className = 'shift-print-title';
+        h.textContent = '本番シフト　' + fmtDate(dt) + '　多目的ホールステージ';
+        sec.appendChild(h);
+        var box = document.createElement('div');
+        box.className = 'chart';
+        sec.appendChild(box);
+        host.appendChild(sec);
+        renderShiftTable(sh, dt, box);      /* 表示された状態で描く＝文字幅が測れる */
+      });
+      return sh.dates.length;
+    }
+
+    function doPrint(what) {
       floor.pause();
       preview.pause();
+      document.body.setAttribute('data-print', what || 'all');
+      if (what !== 'gantt') buildPrintShifts();
       printOpened = false;
       var hint = document.getElementById('print-hint');
       hint.hidden = true;
       try { window.print(); } catch (e) { /* 案内に回す */ }
       setTimeout(function () { if (!printOpened) hint.hidden = false; }, 500);
+    }
+
+    document.getElementById('shift-print').addEventListener('click', function () {
+      document.getElementById('print-what').value = 'shift';
+      doPrint('shift');
+    });
+
+    /* 共有ページでは印刷ダイアログがブラウザに止められることがある。
+       beforeprint が来なければ、開かなかったとみなして案内を出す。 */
+    var printOpened = false;
+    window.addEventListener('beforeprint', function () { printOpened = true; });
+    document.getElementById('print-btn').addEventListener('click', function () {
+      doPrint(document.getElementById('print-what').value);
     });
     document.getElementById('print-stamp').textContent =
       '出力：' + new Date().toLocaleString('ja-JP', {
