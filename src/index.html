@@ -112,75 +112,101 @@
     <button type="button" id="shared-keep">自分の内容で上書き</button>
   </div>
 
-  <div class="edit-bar">
-    <button type="button" id="edit-add" class="primary">＋ 作業を追加</button>
+  <div class="edit-tabs" role="tablist">
+    <button type="button" role="tab" data-edit="task" aria-selected="true">設営の作業</button>
+    <button type="button" role="tab" data-edit="shift" aria-selected="false">本番シフト</button>
+    <button type="button" role="tab" data-edit="place" aria-selected="false">場所（会場）</button>
     <button type="button" id="csv-open">CSVを書き出す</button>
-    <span class="hint" id="edit-count"></span>
   </div>
-  <div class="preview" id="edit-preview">
-    <div class="preview-head">
-      <strong class="preview-title">プレビュー</strong>
-      <div class="preview-tabs" role="tablist">
-        <button type="button" role="tab" data-prev="both" aria-selected="true">両方</button>
-        <button type="button" role="tab" data-prev="team" aria-selected="false">班別ガント</button>
-        <button type="button" role="tab" data-prev="floor" aria-selected="false">平面図</button>
-      </div>
-      <button type="button" id="preview-toggle" aria-expanded="true">折りたたむ</button>
-    </div>
-    <div class="preview-body" id="preview-body">
-      <div class="chart" id="prev-team-wrap"><div id="prev-team"></div></div>
-      <div id="prev-floor-wrap" hidden>
-        <div class="floor-controls compact">
-          <button type="button" id="prev-play" aria-pressed="false">▶ 再生</button>
-          <button type="button" id="prev-prev" aria-label="15分戻す">◀</button>
-          <output id="prev-clock">--:--</output>
-          <button type="button" id="prev-next" aria-label="15分進める">▶</button>
-          <input type="range" id="prev-slider" aria-label="プレビューの時刻（15分刻み）">
+
+  <!-- 設営の作業 -->
+  <div id="edit-sec-task">
+    <div class="preview" id="edit-preview">
+      <div class="preview-head">
+        <strong class="preview-title">プレビュー</strong>
+        <div class="preview-tabs" role="tablist">
+          <button type="button" role="tab" data-prev="both" aria-selected="true">両方</button>
+          <button type="button" role="tab" data-prev="team" aria-selected="false">班別ガント</button>
+          <button type="button" role="tab" data-prev="floor" aria-selected="false">平面図</button>
         </div>
-        <div class="chart floor-chart"><div id="prev-floor"></div></div>
+        <button type="button" id="preview-toggle" aria-expanded="true">折りたたむ</button>
+      </div>
+      <div class="preview-body" id="preview-body">
+        <div class="chart" id="prev-team-wrap"><div id="prev-team"></div></div>
+        <div id="prev-floor-wrap" hidden>
+          <div class="floor-controls compact">
+            <button type="button" id="prev-play" aria-pressed="false">▶ 再生</button>
+            <button type="button" id="prev-prev" aria-label="15分戻す">◀</button>
+            <output id="prev-clock">--:--</output>
+            <button type="button" id="prev-next" aria-label="15分進める">▶</button>
+            <input type="range" id="prev-slider" aria-label="プレビューの時刻（15分刻み）">
+          </div>
+          <div class="chart floor-chart"><div id="prev-floor"></div></div>
+        </div>
       </div>
     </div>
+
+    <div class="edit-bar">
+      <button type="button" id="edit-add" class="primary">＋ 作業を追加</button>
+      <span class="hint" id="edit-count"></span>
+    </div>
+    <p class="edit-help">
+      直すとすぐ上のプレビューに反映されます。
+      行を選ぶと、その作業がプレビューで強調されます。
+      <strong>種別</strong>が「マイルストーン」の行は終了時刻を持ちません（開始に揃います）。
+      <strong>前提</strong>には先に終わっている必要がある作業のIDを <code>,</code> 区切りで、
+      <strong>担当</strong>は複数なら <code>・</code> 区切りで書きます。
+    </p>
+    <div class="edit-scroll" id="edit-table"></div>
   </div>
 
-  <p class="edit-help">
-    直すとすぐ上のプレビューに反映されます。
-    行を選ぶと、その作業がプレビューで強調されます。
-    <strong>種別</strong>が「マイルストーン」の行は終了時刻を持ちません（開始に揃います）。
-    <strong>前提</strong>には先に終わっている必要がある作業のIDを <code>,</code> 区切りで、
-    <strong>担当</strong>は複数なら <code>・</code> 区切りで書きます。
-  </p>
-  <div class="edit-scroll" id="edit-table"></div>
+  <!-- 本番シフト -->
+  <div id="edit-sec-shift" hidden>
+    <div class="preview" id="shift-preview">
+      <div class="preview-head">
+        <strong class="preview-title">プレビュー</strong>
+        <div class="preview-tabs" id="shift-prev-days" role="tablist"></div>
+        <button type="button" id="shift-preview-toggle" aria-expanded="true">折りたたむ</button>
+      </div>
+      <div class="preview-body">
+        <div class="chart"><div id="prev-shift"></div></div>
+      </div>
+    </div>
 
-  <h2 class="edit-section">本番シフト</h2>
-  <p class="edit-help">
-    本番当日（多目的ホールステージ）の担当です。<strong>日付</strong>は <code>2026-10-17</code> の形で書きます。
-    <strong>種別</strong>は空欄＝人のシフト、<code>program</code>＝実行委の企画枠、<code>hall</code>＝会場が使える時間です。
-    同じ人が役割を変えるときは行を分けてください。
-  </p>
-  <div class="edit-bar">
-    <button type="button" id="shift-add" class="primary">＋ シフトを追加</button>
-    <span class="hint" id="shift-count"></span>
-  </div>
-  <div class="edit-scroll" id="shift-table"></div>
-
-  <h2 class="edit-section">場所（会場の配置）</h2>
-  <p class="edit-help">
-    <strong>平面図の中の場所をクリックしてつかむと動かせます。</strong>
-    右下の青いつまみで大きさを変えられます。<code>schedule.csv</code> の「場所」は内部の id で
-    結ばれているので、動かしても名前を変えても、作業の割り当ては崩れません。
-  </p>
-  <div class="layout-bar">
-    <button type="button" id="layout-add" class="primary">＋ 場所を追加</button>
-    <button type="button" id="layout-reset">配布時の会場に戻す</button>
-    <span class="hint">場所を選ぶと、右の欄で名前・位置・大きさを数字でも直せます</span>
-  </div>
-  <div class="layout-wrap">
-    <div class="chart layout-canvas" id="layout-canvas"></div>
-    <div class="layout-info" id="layout-info"></div>
+    <div class="edit-bar">
+      <button type="button" id="shift-add" class="primary">＋ シフトを追加</button>
+      <span class="hint" id="shift-count"></span>
+    </div>
+    <p class="edit-help">
+      本番当日（多目的ホールステージ）の担当です。行を選ぶと、その日のプレビューに切り替わって強調されます。
+      <strong>日付</strong>は <code>2026-10-17</code> の形。
+      <strong>種別</strong>は空欄＝人のシフト、<code>企画枠</code>＝実行委の枠、<code>会場使用可</code>＝ホールが使える時間です。
+      同じ人が役割を変えるときは行を分けてください。
+    </p>
+    <div class="edit-scroll" id="shift-table"></div>
   </div>
 
-  <h3 class="edit-subsection">名前をまとめて直す</h3>
+  <!-- 場所 -->
+  <div id="edit-sec-place" hidden>
+    <p class="edit-help">
+      <strong>平面図の中の場所をつかむと動かせます。</strong>
+      どの場所にも右下に小さな青い■が付いていて、これをつまむと大きさが変わります。
+      <code>schedule.csv</code> の「場所」は内部の id で結ばれているので、
+      動かしても名前を変えても、作業の割り当ては崩れません。
+    </p>
+    <div class="layout-bar">
+      <button type="button" id="layout-add" class="primary">＋ 場所を追加</button>
+      <button type="button" id="layout-reset">配布時の会場に戻す</button>
+      <span class="hint">場所を選ぶと、右の欄で名前・位置・大きさを数字でも直せます</span>
+    </div>
+    <div class="layout-wrap">
+      <div class="chart layout-canvas" id="layout-canvas"></div>
+      <div class="layout-info" id="layout-info"></div>
+    </div>
+
+    <h3 class="edit-subsection">名前をまとめて直す</h3>
   <div class="area-names" id="area-names"></div>
+  </div>
 </section>
 
 <footer class="no-print">

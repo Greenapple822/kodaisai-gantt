@@ -14,6 +14,30 @@
 
 * { box-sizing: border-box; }
 
+/* ブラウザによって文字が勝手に大きくなるのを止める。
+   Chrome / Safari / Firefox で同じ大きさに見せるための下地。 */
+html {
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-size: 16px;
+}
+
+/* 入力欄はブラウザごとに既定の文字サイズと高さが違う。明示して揃える。 */
+input, select, textarea, button {
+  font-family: inherit;
+  line-height: 1.4;
+  color: var(--fg);
+}
+
+input[type="time"], input[type="date"] {
+  font-variant-numeric: tabular-nums;
+  min-height: 28px;
+}
+
+/* 図は本来の大きさで頭打ちにする（引き伸ばすと文字まで拡大されるため） */
+.chart svg, .layout-canvas svg { margin: 0 auto; }
+
 body {
   margin: 0;
   padding: 16px;
@@ -367,6 +391,46 @@ button.primary:hover { filter: brightness(1.08); }
 .edit-bar button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 .edit-bar .hint { margin-left: auto; }
 
+.edit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 12px 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--line);
+}
+
+.edit-tabs button {
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  padding: 7px 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-alt);
+  color: var(--fg-sub);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.edit-tabs button[aria-selected="true"] {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: #fff;
+  font-weight: bold;
+}
+
+.edit-tabs #csv-open {
+  margin-left: auto;
+  border-color: var(--line-strong);
+  background: #fff;
+}
+
+#shift-preview[data-open="false"] .preview-body { display: none; }
+#prev-shift g.dim { opacity: 0.35; }
+#prev-shift g.hl rect { stroke: #101215; stroke-width: 2.5; }
+#prev-shift svg { min-width: 700px; }
+
 /* ---------- 編集中のプレビュー ---------- */
 
 .preview {
@@ -418,7 +482,7 @@ button.primary:hover { filter: brightness(1.08); }
 #preview-toggle { margin-left: auto; }
 
 .preview-body {
-  max-height: 44vh;
+  max-height: 420px;
   overflow: auto;
   padding: 8px;
 }
@@ -427,7 +491,7 @@ button.primary:hover { filter: brightness(1.08); }
 
 /* 両方モード：広い画面ではガントと平面図を横に並べる */
 .preview-body[data-mode="both"] {
-  max-height: 56vh;
+  max-height: 520px;
 }
 
 @media (min-width: 900px) {
@@ -466,7 +530,7 @@ button.primary:hover { filter: brightness(1.08); }
 @media (max-width: 760px) {
   /* 狭い画面で表の半分を覆わないように、追従はやめて高さも抑える */
   .preview { position: static; }
-  .preview-body { max-height: 38vh; }
+  .preview-body { max-height: 320px; }
 }
 
 .edit-help {

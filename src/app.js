@@ -374,6 +374,9 @@ function renderTeamGantt(model, container) {
   container.innerHTML = '';
   var svg = el('svg', {
     viewBox: '0 0 ' + width + ' ' + height,
+    /* 幅いっぱいに引き伸ばすと文字まで拡大され、画面やブラウザごとに見え方が変わる。
+       本来の大きさで頭打ちにして、狭いときだけ枠内で横スクロールさせる。 */
+    style: 'max-width:' + width + 'px',
     role: 'img',
     'aria-label': '班別設営ガントチャート'
   }, container);
@@ -552,8 +555,10 @@ FloorView.prototype.buildPlan = function () {
 
   this.areaNodes = {};
   this.svgHost.innerHTML = '';
+  var box = viewBoxRect(layout);
   var svg = el('svg', {
     viewBox: layout.viewBox || '0 0 680 400',
+    style: 'max-width:' + box.w + 'px',
     role: 'img',
     'aria-label': '多目的ホール平面図タイムライン'
   }, this.svgHost);
@@ -799,6 +804,7 @@ function renderShiftTable(model, date, container) {
 
   var svg = el('svg', {
     viewBox: '0 0 ' + width + ' ' + height,
+    style: 'max-width:' + width + 'px',
     role: 'img',
     'aria-label': fmtDate(date) + ' のシフト表'
   }, container);
@@ -877,7 +883,7 @@ function renderShiftTable(model, date, container) {
         .forEach(function (it) {
           var bx = x(it.start);
           var bw = Math.max(3, (it.end - it.start) * SH_PX_PER_MIN);
-          var grp = el('g', null, svg);
+          var grp = el('g', { 'data-person': row.person }, svg);
           var title = el('title', null, grp);
           title.textContent = row.person + '／' + it.role + '\n'
             + fmtMin(it.start) + '–' + fmtMin(it.end)
@@ -953,6 +959,7 @@ LayoutEditor.prototype.render = function () {
   this.host.innerHTML = '';
   var svg = el('svg', {
     viewBox: this.layout.viewBox || '0 0 680 400',
+    style: 'max-width:' + box.w + 'px',
     role: 'application',
     'aria-label': '会場の配置を編集する平面図'
   }, this.host);
@@ -2074,6 +2081,23 @@ ShiftEditor.prototype.bind = function () {
   });
 };
 
+/* 今どの行を触っているかを外に知らせる（プレビューの強調に使う） */
+ShiftEditor.prototype.watchFocus = function (fn) {
+  var self = this;
+  this.host.addEventListener('focusin', function (e) {
+    var tr = e.target.closest ? e.target.closest('tr') : null;
+    if (!tr) return;
+    var trs = [].slice.call(self.host.querySelectorAll('tbody tr'));
+    var i = trs.indexOf(tr);
+    if (i >= 0 && self.rows[i]) fn(self.rows[i]);
+  });
+  this.host.addEventListener('focusout', function () {
+    setTimeout(function () {
+      if (!self.host.contains(document.activeElement)) fn(null);
+    }, 0);
+  });
+};
+
 ShiftEditor.prototype.addRow = function (date) {
   var r = {};
   SHIFT_COLS.forEach(function (c) { r[c] = ''; });
@@ -2271,6 +2295,29 @@ function renderIssues(issues, container) {
 }
 
 /* =====================  ビュー切替  ===================== */
+
+/* 編集タブの中を「設営の作業 / 本番シフト / 場所」で分ける。
+   1画面に全部積むと縦に長くなりすぎるため。 */
+function setupEditTabs(onShow) {
+  var tabs = [].slice.call(document.querySelectorAll('[data-edit]'));
+  var secs = {
+    task: document.getElementById('edit-sec-task'),
+    shift: document.getElementById('edit-sec-shift'),
+    place: document.getElementById('edit-sec-place')
+  };
+  function show(name) {
+    tabs.forEach(function (b) {
+      b.setAttribute('aria-selected', b.getAttribute('data-edit') === name ? 'true' : 'false');
+    });
+    Object.keys(secs).forEach(function (k) { secs[k].hidden = k !== name; });
+    if (onShow) onShow(name);
+  }
+  tabs.forEach(function (b) {
+    b.addEventListener('click', function () { show(b.getAttribute('data-edit')); });
+  });
+  show('task');
+  return { show: show };
+}
 
 function setupTabs(onShow) {
   var tabs = [].slice.call(document.querySelectorAll('[data-view]'));
@@ -2508,9 +2555,76 @@ function main() {
       editor.markIssues(m.issues);
       shiftEditor.markIssues(sh.issues);
       renderShifts(sh);
+      renderShiftPreview(sh);
       updateMeta(m, i2.range);
       return csv;
     }
+
+    /* 編集タブの中のシフトプレビュー。日を選べて、編集中の行を強調する。 */
+    var shiftPrevDate = null;
+    var shiftHighlight = null;
+
+    function renderShiftPreview(sh) {
+      var root = document.getElementById('shift-preview');
+      if (root.getAttribute('data-open') === 'false') return;
+      if (shiftPrevDate === null || sh.dates.indexOf(shiftPrevDate) < 0) {
+        shiftPrevDate = sh.dates.length ? sh.dates[0] : null;
+      }
+      document.getElementById('shift-prev-days').innerHTML = sh.dates.map(function (dt) {
+        return '<button type="button" role="tab" data-pday="' + esc(dt) + '"'
+          + ' aria-selected="' + (dt === shiftPrevDate ? 'true' : 'false') + '">'
+          + esc(fmtDate(dt)) + '</button>';
+      }).join('');
+      renderShiftTable(sh, shiftPrevDate, document.getElementById('prev-shift'));
+      applyShiftHighlight();
+    }
+
+    /* 編集中の行の人を濃く、それ以外を薄くする */
+    function applyShiftHighlight() {
+      var groups = [].slice.call(document.querySelectorAll('#prev-shift g[data-person]'));
+      var who = shiftHighlight;
+      if (who && !groups.some(function (g) { return g.getAttribute('data-person') === who; })) {
+        who = shiftHighlight = null;
+      }
+      groups.forEach(function (g) {
+        g.classList.remove('hl'); g.classList.remove('dim');
+        if (!who) return;
+        if (g.getAttribute('data-person') === who) g.classList.add('hl');
+        else g.classList.add('dim');
+      });
+    }
+
+    document.getElementById('shift-prev-days').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('button[data-pday]') : null;
+      if (!b) return;
+      shiftPrevDate = b.getAttribute('data-pday');
+      renderShiftPreview(buildShifts(shiftsToCsv(shiftEditor.rows)));
+    });
+
+    (function () {
+      var root = document.getElementById('shift-preview');
+      var toggle = document.getElementById('shift-preview-toggle');
+      root.setAttribute('data-open', 'true');
+      toggle.addEventListener('click', function () {
+        var open = root.getAttribute('data-open') !== 'false';
+        root.setAttribute('data-open', open ? 'false' : 'true');
+        toggle.textContent = open ? '開く' : '折りたたむ';
+        toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+        if (!open) renderShiftPreview(buildShifts(shiftsToCsv(shiftEditor.rows)));
+      });
+    }());
+
+    /* シフトの表で行を選んだら、その日に切り替えて本人を強調する */
+    shiftEditor.watchFocus(function (row) {
+      if (!row) { shiftHighlight = null; applyShiftHighlight(); return; }
+      shiftHighlight = row.person || null;
+      if (row.date && row.date !== shiftPrevDate) {
+        shiftPrevDate = row.date;
+        renderShiftPreview(buildShifts(shiftsToCsv(shiftEditor.rows)));
+      } else {
+        applyShiftHighlight();
+      }
+    });
 
     /* シフトタブ：日付を選んで、その日の班別シフト表を描く */
     function renderShifts(sh) {
@@ -2717,6 +2831,13 @@ function main() {
     function rerenderShiftOnShow() {
       renderShifts(buildShifts(shiftsToCsv(shiftEditor.rows)));
     }
+
+    var editTabs = setupEditTabs(function (name) {
+      /* 隠れている間に描いた図は文字幅を測れていない。見せる時に描き直す。 */
+      if (name === 'task') preview.render();
+      else preview.pause();
+      if (name === 'shift') renderShiftPreview(buildShifts(shiftsToCsv(shiftEditor.rows)));
+    });
 
     setupTabs(function (name) {
       if (name !== 'floor') floor.pause();

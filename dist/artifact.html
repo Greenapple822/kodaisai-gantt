@@ -16,6 +16,30 @@
 
 * { box-sizing: border-box; }
 
+/* ブラウザによって文字が勝手に大きくなるのを止める。
+   Chrome / Safari / Firefox で同じ大きさに見せるための下地。 */
+html {
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-size: 16px;
+}
+
+/* 入力欄はブラウザごとに既定の文字サイズと高さが違う。明示して揃える。 */
+input, select, textarea, button {
+  font-family: inherit;
+  line-height: 1.4;
+  color: var(--fg);
+}
+
+input[type="time"], input[type="date"] {
+  font-variant-numeric: tabular-nums;
+  min-height: 28px;
+}
+
+/* 図は本来の大きさで頭打ちにする（引き伸ばすと文字まで拡大されるため） */
+.chart svg, .layout-canvas svg { margin: 0 auto; }
+
 body {
   margin: 0;
   padding: 16px;
@@ -369,6 +393,46 @@ button.primary:hover { filter: brightness(1.08); }
 .edit-bar button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
 .edit-bar .hint { margin-left: auto; }
 
+.edit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 12px 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid var(--line);
+}
+
+.edit-tabs button {
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  padding: 7px 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-alt);
+  color: var(--fg-sub);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.edit-tabs button[aria-selected="true"] {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: #fff;
+  font-weight: bold;
+}
+
+.edit-tabs #csv-open {
+  margin-left: auto;
+  border-color: var(--line-strong);
+  background: #fff;
+}
+
+#shift-preview[data-open="false"] .preview-body { display: none; }
+#prev-shift g.dim { opacity: 0.35; }
+#prev-shift g.hl rect { stroke: #101215; stroke-width: 2.5; }
+#prev-shift svg { min-width: 700px; }
+
 /* ---------- 編集中のプレビュー ---------- */
 
 .preview {
@@ -420,7 +484,7 @@ button.primary:hover { filter: brightness(1.08); }
 #preview-toggle { margin-left: auto; }
 
 .preview-body {
-  max-height: 44vh;
+  max-height: 420px;
   overflow: auto;
   padding: 8px;
 }
@@ -429,7 +493,7 @@ button.primary:hover { filter: brightness(1.08); }
 
 /* 両方モード：広い画面ではガントと平面図を横に並べる */
 .preview-body[data-mode="both"] {
-  max-height: 56vh;
+  max-height: 520px;
 }
 
 @media (min-width: 900px) {
@@ -468,7 +532,7 @@ button.primary:hover { filter: brightness(1.08); }
 @media (max-width: 760px) {
   /* 狭い画面で表の半分を覆わないように、追従はやめて高さも抑える */
   .preview { position: static; }
-  .preview-body { max-height: 38vh; }
+  .preview-body { max-height: 320px; }
 }
 
 .edit-help {
@@ -1045,75 +1109,101 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     <button type="button" id="shared-keep">自分の内容で上書き</button>
   </div>
 
-  <div class="edit-bar">
-    <button type="button" id="edit-add" class="primary">＋ 作業を追加</button>
+  <div class="edit-tabs" role="tablist">
+    <button type="button" role="tab" data-edit="task" aria-selected="true">設営の作業</button>
+    <button type="button" role="tab" data-edit="shift" aria-selected="false">本番シフト</button>
+    <button type="button" role="tab" data-edit="place" aria-selected="false">場所（会場）</button>
     <button type="button" id="csv-open">CSVを書き出す</button>
-    <span class="hint" id="edit-count"></span>
   </div>
-  <div class="preview" id="edit-preview">
-    <div class="preview-head">
-      <strong class="preview-title">プレビュー</strong>
-      <div class="preview-tabs" role="tablist">
-        <button type="button" role="tab" data-prev="both" aria-selected="true">両方</button>
-        <button type="button" role="tab" data-prev="team" aria-selected="false">班別ガント</button>
-        <button type="button" role="tab" data-prev="floor" aria-selected="false">平面図</button>
-      </div>
-      <button type="button" id="preview-toggle" aria-expanded="true">折りたたむ</button>
-    </div>
-    <div class="preview-body" id="preview-body">
-      <div class="chart" id="prev-team-wrap"><div id="prev-team"></div></div>
-      <div id="prev-floor-wrap" hidden>
-        <div class="floor-controls compact">
-          <button type="button" id="prev-play" aria-pressed="false">▶ 再生</button>
-          <button type="button" id="prev-prev" aria-label="15分戻す">◀</button>
-          <output id="prev-clock">--:--</output>
-          <button type="button" id="prev-next" aria-label="15分進める">▶</button>
-          <input type="range" id="prev-slider" aria-label="プレビューの時刻（15分刻み）">
+
+  <!-- 設営の作業 -->
+  <div id="edit-sec-task">
+    <div class="preview" id="edit-preview">
+      <div class="preview-head">
+        <strong class="preview-title">プレビュー</strong>
+        <div class="preview-tabs" role="tablist">
+          <button type="button" role="tab" data-prev="both" aria-selected="true">両方</button>
+          <button type="button" role="tab" data-prev="team" aria-selected="false">班別ガント</button>
+          <button type="button" role="tab" data-prev="floor" aria-selected="false">平面図</button>
         </div>
-        <div class="chart floor-chart"><div id="prev-floor"></div></div>
+        <button type="button" id="preview-toggle" aria-expanded="true">折りたたむ</button>
+      </div>
+      <div class="preview-body" id="preview-body">
+        <div class="chart" id="prev-team-wrap"><div id="prev-team"></div></div>
+        <div id="prev-floor-wrap" hidden>
+          <div class="floor-controls compact">
+            <button type="button" id="prev-play" aria-pressed="false">▶ 再生</button>
+            <button type="button" id="prev-prev" aria-label="15分戻す">◀</button>
+            <output id="prev-clock">--:--</output>
+            <button type="button" id="prev-next" aria-label="15分進める">▶</button>
+            <input type="range" id="prev-slider" aria-label="プレビューの時刻（15分刻み）">
+          </div>
+          <div class="chart floor-chart"><div id="prev-floor"></div></div>
+        </div>
       </div>
     </div>
+
+    <div class="edit-bar">
+      <button type="button" id="edit-add" class="primary">＋ 作業を追加</button>
+      <span class="hint" id="edit-count"></span>
+    </div>
+    <p class="edit-help">
+      直すとすぐ上のプレビューに反映されます。
+      行を選ぶと、その作業がプレビューで強調されます。
+      <strong>種別</strong>が「マイルストーン」の行は終了時刻を持ちません（開始に揃います）。
+      <strong>前提</strong>には先に終わっている必要がある作業のIDを <code>,</code> 区切りで、
+      <strong>担当</strong>は複数なら <code>・</code> 区切りで書きます。
+    </p>
+    <div class="edit-scroll" id="edit-table"></div>
   </div>
 
-  <p class="edit-help">
-    直すとすぐ上のプレビューに反映されます。
-    行を選ぶと、その作業がプレビューで強調されます。
-    <strong>種別</strong>が「マイルストーン」の行は終了時刻を持ちません（開始に揃います）。
-    <strong>前提</strong>には先に終わっている必要がある作業のIDを <code>,</code> 区切りで、
-    <strong>担当</strong>は複数なら <code>・</code> 区切りで書きます。
-  </p>
-  <div class="edit-scroll" id="edit-table"></div>
+  <!-- 本番シフト -->
+  <div id="edit-sec-shift" hidden>
+    <div class="preview" id="shift-preview">
+      <div class="preview-head">
+        <strong class="preview-title">プレビュー</strong>
+        <div class="preview-tabs" id="shift-prev-days" role="tablist"></div>
+        <button type="button" id="shift-preview-toggle" aria-expanded="true">折りたたむ</button>
+      </div>
+      <div class="preview-body">
+        <div class="chart"><div id="prev-shift"></div></div>
+      </div>
+    </div>
 
-  <h2 class="edit-section">本番シフト</h2>
-  <p class="edit-help">
-    本番当日（多目的ホールステージ）の担当です。<strong>日付</strong>は <code>2026-10-17</code> の形で書きます。
-    <strong>種別</strong>は空欄＝人のシフト、<code>program</code>＝実行委の企画枠、<code>hall</code>＝会場が使える時間です。
-    同じ人が役割を変えるときは行を分けてください。
-  </p>
-  <div class="edit-bar">
-    <button type="button" id="shift-add" class="primary">＋ シフトを追加</button>
-    <span class="hint" id="shift-count"></span>
-  </div>
-  <div class="edit-scroll" id="shift-table"></div>
-
-  <h2 class="edit-section">場所（会場の配置）</h2>
-  <p class="edit-help">
-    <strong>平面図の中の場所をクリックしてつかむと動かせます。</strong>
-    右下の青いつまみで大きさを変えられます。<code>schedule.csv</code> の「場所」は内部の id で
-    結ばれているので、動かしても名前を変えても、作業の割り当ては崩れません。
-  </p>
-  <div class="layout-bar">
-    <button type="button" id="layout-add" class="primary">＋ 場所を追加</button>
-    <button type="button" id="layout-reset">配布時の会場に戻す</button>
-    <span class="hint">場所を選ぶと、右の欄で名前・位置・大きさを数字でも直せます</span>
-  </div>
-  <div class="layout-wrap">
-    <div class="chart layout-canvas" id="layout-canvas"></div>
-    <div class="layout-info" id="layout-info"></div>
+    <div class="edit-bar">
+      <button type="button" id="shift-add" class="primary">＋ シフトを追加</button>
+      <span class="hint" id="shift-count"></span>
+    </div>
+    <p class="edit-help">
+      本番当日（多目的ホールステージ）の担当です。行を選ぶと、その日のプレビューに切り替わって強調されます。
+      <strong>日付</strong>は <code>2026-10-17</code> の形。
+      <strong>種別</strong>は空欄＝人のシフト、<code>企画枠</code>＝実行委の枠、<code>会場使用可</code>＝ホールが使える時間です。
+      同じ人が役割を変えるときは行を分けてください。
+    </p>
+    <div class="edit-scroll" id="shift-table"></div>
   </div>
 
-  <h3 class="edit-subsection">名前をまとめて直す</h3>
+  <!-- 場所 -->
+  <div id="edit-sec-place" hidden>
+    <p class="edit-help">
+      <strong>平面図の中の場所をつかむと動かせます。</strong>
+      どの場所にも右下に小さな青い■が付いていて、これをつまむと大きさが変わります。
+      <code>schedule.csv</code> の「場所」は内部の id で結ばれているので、
+      動かしても名前を変えても、作業の割り当ては崩れません。
+    </p>
+    <div class="layout-bar">
+      <button type="button" id="layout-add" class="primary">＋ 場所を追加</button>
+      <button type="button" id="layout-reset">配布時の会場に戻す</button>
+      <span class="hint">場所を選ぶと、右の欄で名前・位置・大きさを数字でも直せます</span>
+    </div>
+    <div class="layout-wrap">
+      <div class="chart layout-canvas" id="layout-canvas"></div>
+      <div class="layout-info" id="layout-info"></div>
+    </div>
+
+    <h3 class="edit-subsection">名前をまとめて直す</h3>
   <div class="area-names" id="area-names"></div>
+  </div>
 </section>
 
 <footer class="no-print">放送研究会　工大祭ステージ企画　／　データ更新：2026/09/16 19:10　／　内容を直すときは部内の schedule.csv を編集してこのページを差し替えてください。</footer>
@@ -1153,7 +1243,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
 </div>
 
 <script>
-window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}, "shifts": "date,team,person,role,start,end,note,kind\n2026-10-17,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-17,全班,,工大祭コンサート,14:00,15:30,企画①,program\n2026-10-17,音響,山田,仕込み,09:30,12:00,,\n2026-10-17,音響,山田,音響卓,12:30,16:30,,\n2026-10-17,音響,中村,仕込み,09:30,12:00,,\n2026-10-17,音響,中村,モニター,12:30,16:30,,\n2026-10-17,音響,伊藤,マイク・ワイヤレス,12:30,16:00,電池は予備を持つ,\n2026-10-17,映像,小林,仕込み,09:30,12:00,,\n2026-10-17,映像,小林,スイッチャー,12:30,16:30,,\n2026-10-17,映像,加藤,仕込み,09:30,12:00,,\n2026-10-17,映像,加藤,カメラ（上手）,12:30,16:00,,\n2026-10-17,映像,吉田,カメラ（下手）,12:30,16:00,,\n2026-10-17,照明,佐藤,仕込み,09:30,12:00,,\n2026-10-17,照明,佐藤,調光卓,12:30,16:30,,\n2026-10-17,照明,鈴木,仕込み,09:30,12:00,,\n2026-10-17,照明,鈴木,フォロー,13:30,16:00,,\n2026-10-17,照明,高橋,舞台周り,09:30,16:30,,\n2026-10-17,全班,渡辺,進行・インカム,09:30,16:30,実行委との窓口,\n2026-10-18,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-18,全班,,このレジスタにより,14:00,15:30,企画②,program\n2026-10-18,全班,,サテライト,16:00,18:00,企画③,program\n2026-10-18,音響,山田,点検・立ち上げ,09:30,10:30,,\n2026-10-18,音響,山田,音響卓,10:30,18:30,,\n2026-10-18,音響,中村,モニター,10:30,18:30,,\n2026-10-18,音響,伊藤,マイク・ワイヤレス,13:00,18:00,,\n2026-10-18,映像,小林,点検・立ち上げ,09:30,10:30,,\n2026-10-18,映像,小林,スイッチャー,10:30,18:30,,\n2026-10-18,映像,加藤,カメラ（上手）,13:00,18:00,,\n2026-10-18,映像,吉田,カメラ（下手）,13:00,18:00,,\n2026-10-18,照明,佐藤,点検・立ち上げ,09:30,10:30,,\n2026-10-18,照明,佐藤,調光卓,10:30,18:30,,\n2026-10-18,照明,鈴木,フォロー,13:00,18:00,,\n2026-10-18,照明,高橋,舞台周り,09:30,18:30,,\n2026-10-18,全班,渡辺,進行・インカム,09:30,18:30,実行委との窓口,\n", "build": "20260924-001619"};
+window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}, "shifts": "date,team,person,role,start,end,note,kind\n2026-10-17,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-17,全班,,工大祭コンサート,14:00,15:30,企画①,program\n2026-10-17,音響,山田,仕込み,09:30,12:00,,\n2026-10-17,音響,山田,音響卓,12:30,16:30,,\n2026-10-17,音響,中村,仕込み,09:30,12:00,,\n2026-10-17,音響,中村,モニター,12:30,16:30,,\n2026-10-17,音響,伊藤,マイク・ワイヤレス,12:30,16:00,電池は予備を持つ,\n2026-10-17,映像,小林,仕込み,09:30,12:00,,\n2026-10-17,映像,小林,スイッチャー,12:30,16:30,,\n2026-10-17,映像,加藤,仕込み,09:30,12:00,,\n2026-10-17,映像,加藤,カメラ（上手）,12:30,16:00,,\n2026-10-17,映像,吉田,カメラ（下手）,12:30,16:00,,\n2026-10-17,照明,佐藤,仕込み,09:30,12:00,,\n2026-10-17,照明,佐藤,調光卓,12:30,16:30,,\n2026-10-17,照明,鈴木,仕込み,09:30,12:00,,\n2026-10-17,照明,鈴木,フォロー,13:30,16:00,,\n2026-10-17,照明,高橋,舞台周り,09:30,16:30,,\n2026-10-17,全班,渡辺,進行・インカム,09:30,16:30,実行委との窓口,\n2026-10-18,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-18,全班,,このレジスタにより,14:00,15:30,企画②,program\n2026-10-18,全班,,サテライト,16:00,18:00,企画③,program\n2026-10-18,音響,山田,点検・立ち上げ,09:30,10:30,,\n2026-10-18,音響,山田,音響卓,10:30,18:30,,\n2026-10-18,音響,中村,モニター,10:30,18:30,,\n2026-10-18,音響,伊藤,マイク・ワイヤレス,13:00,18:00,,\n2026-10-18,映像,小林,点検・立ち上げ,09:30,10:30,,\n2026-10-18,映像,小林,スイッチャー,10:30,18:30,,\n2026-10-18,映像,加藤,カメラ（上手）,13:00,18:00,,\n2026-10-18,映像,吉田,カメラ（下手）,13:00,18:00,,\n2026-10-18,照明,佐藤,点検・立ち上げ,09:30,10:30,,\n2026-10-18,照明,佐藤,調光卓,10:30,18:30,,\n2026-10-18,照明,鈴木,フォロー,13:00,18:00,,\n2026-10-18,照明,高橋,舞台周り,09:30,18:30,,\n2026-10-18,全班,渡辺,進行・インカム,09:30,18:30,実行委との窓口,\n", "build": "20260924-002450"};
 </script>
 <script>
 'use strict';
@@ -1532,6 +1622,9 @@ function renderTeamGantt(model, container) {
   container.innerHTML = '';
   var svg = el('svg', {
     viewBox: '0 0 ' + width + ' ' + height,
+    /* 幅いっぱいに引き伸ばすと文字まで拡大され、画面やブラウザごとに見え方が変わる。
+       本来の大きさで頭打ちにして、狭いときだけ枠内で横スクロールさせる。 */
+    style: 'max-width:' + width + 'px',
     role: 'img',
     'aria-label': '班別設営ガントチャート'
   }, container);
@@ -1710,8 +1803,10 @@ FloorView.prototype.buildPlan = function () {
 
   this.areaNodes = {};
   this.svgHost.innerHTML = '';
+  var box = viewBoxRect(layout);
   var svg = el('svg', {
     viewBox: layout.viewBox || '0 0 680 400',
+    style: 'max-width:' + box.w + 'px',
     role: 'img',
     'aria-label': '多目的ホール平面図タイムライン'
   }, this.svgHost);
@@ -1957,6 +2052,7 @@ function renderShiftTable(model, date, container) {
 
   var svg = el('svg', {
     viewBox: '0 0 ' + width + ' ' + height,
+    style: 'max-width:' + width + 'px',
     role: 'img',
     'aria-label': fmtDate(date) + ' のシフト表'
   }, container);
@@ -2035,7 +2131,7 @@ function renderShiftTable(model, date, container) {
         .forEach(function (it) {
           var bx = x(it.start);
           var bw = Math.max(3, (it.end - it.start) * SH_PX_PER_MIN);
-          var grp = el('g', null, svg);
+          var grp = el('g', { 'data-person': row.person }, svg);
           var title = el('title', null, grp);
           title.textContent = row.person + '／' + it.role + '\n'
             + fmtMin(it.start) + '–' + fmtMin(it.end)
@@ -2111,6 +2207,7 @@ LayoutEditor.prototype.render = function () {
   this.host.innerHTML = '';
   var svg = el('svg', {
     viewBox: this.layout.viewBox || '0 0 680 400',
+    style: 'max-width:' + box.w + 'px',
     role: 'application',
     'aria-label': '会場の配置を編集する平面図'
   }, this.host);
@@ -3232,6 +3329,23 @@ ShiftEditor.prototype.bind = function () {
   });
 };
 
+/* 今どの行を触っているかを外に知らせる（プレビューの強調に使う） */
+ShiftEditor.prototype.watchFocus = function (fn) {
+  var self = this;
+  this.host.addEventListener('focusin', function (e) {
+    var tr = e.target.closest ? e.target.closest('tr') : null;
+    if (!tr) return;
+    var trs = [].slice.call(self.host.querySelectorAll('tbody tr'));
+    var i = trs.indexOf(tr);
+    if (i >= 0 && self.rows[i]) fn(self.rows[i]);
+  });
+  this.host.addEventListener('focusout', function () {
+    setTimeout(function () {
+      if (!self.host.contains(document.activeElement)) fn(null);
+    }, 0);
+  });
+};
+
 ShiftEditor.prototype.addRow = function (date) {
   var r = {};
   SHIFT_COLS.forEach(function (c) { r[c] = ''; });
@@ -3429,6 +3543,29 @@ function renderIssues(issues, container) {
 }
 
 /* =====================  ビュー切替  ===================== */
+
+/* 編集タブの中を「設営の作業 / 本番シフト / 場所」で分ける。
+   1画面に全部積むと縦に長くなりすぎるため。 */
+function setupEditTabs(onShow) {
+  var tabs = [].slice.call(document.querySelectorAll('[data-edit]'));
+  var secs = {
+    task: document.getElementById('edit-sec-task'),
+    shift: document.getElementById('edit-sec-shift'),
+    place: document.getElementById('edit-sec-place')
+  };
+  function show(name) {
+    tabs.forEach(function (b) {
+      b.setAttribute('aria-selected', b.getAttribute('data-edit') === name ? 'true' : 'false');
+    });
+    Object.keys(secs).forEach(function (k) { secs[k].hidden = k !== name; });
+    if (onShow) onShow(name);
+  }
+  tabs.forEach(function (b) {
+    b.addEventListener('click', function () { show(b.getAttribute('data-edit')); });
+  });
+  show('task');
+  return { show: show };
+}
 
 function setupTabs(onShow) {
   var tabs = [].slice.call(document.querySelectorAll('[data-view]'));
@@ -3666,9 +3803,76 @@ function main() {
       editor.markIssues(m.issues);
       shiftEditor.markIssues(sh.issues);
       renderShifts(sh);
+      renderShiftPreview(sh);
       updateMeta(m, i2.range);
       return csv;
     }
+
+    /* 編集タブの中のシフトプレビュー。日を選べて、編集中の行を強調する。 */
+    var shiftPrevDate = null;
+    var shiftHighlight = null;
+
+    function renderShiftPreview(sh) {
+      var root = document.getElementById('shift-preview');
+      if (root.getAttribute('data-open') === 'false') return;
+      if (shiftPrevDate === null || sh.dates.indexOf(shiftPrevDate) < 0) {
+        shiftPrevDate = sh.dates.length ? sh.dates[0] : null;
+      }
+      document.getElementById('shift-prev-days').innerHTML = sh.dates.map(function (dt) {
+        return '<button type="button" role="tab" data-pday="' + esc(dt) + '"'
+          + ' aria-selected="' + (dt === shiftPrevDate ? 'true' : 'false') + '">'
+          + esc(fmtDate(dt)) + '</button>';
+      }).join('');
+      renderShiftTable(sh, shiftPrevDate, document.getElementById('prev-shift'));
+      applyShiftHighlight();
+    }
+
+    /* 編集中の行の人を濃く、それ以外を薄くする */
+    function applyShiftHighlight() {
+      var groups = [].slice.call(document.querySelectorAll('#prev-shift g[data-person]'));
+      var who = shiftHighlight;
+      if (who && !groups.some(function (g) { return g.getAttribute('data-person') === who; })) {
+        who = shiftHighlight = null;
+      }
+      groups.forEach(function (g) {
+        g.classList.remove('hl'); g.classList.remove('dim');
+        if (!who) return;
+        if (g.getAttribute('data-person') === who) g.classList.add('hl');
+        else g.classList.add('dim');
+      });
+    }
+
+    document.getElementById('shift-prev-days').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('button[data-pday]') : null;
+      if (!b) return;
+      shiftPrevDate = b.getAttribute('data-pday');
+      renderShiftPreview(buildShifts(shiftsToCsv(shiftEditor.rows)));
+    });
+
+    (function () {
+      var root = document.getElementById('shift-preview');
+      var toggle = document.getElementById('shift-preview-toggle');
+      root.setAttribute('data-open', 'true');
+      toggle.addEventListener('click', function () {
+        var open = root.getAttribute('data-open') !== 'false';
+        root.setAttribute('data-open', open ? 'false' : 'true');
+        toggle.textContent = open ? '開く' : '折りたたむ';
+        toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+        if (!open) renderShiftPreview(buildShifts(shiftsToCsv(shiftEditor.rows)));
+      });
+    }());
+
+    /* シフトの表で行を選んだら、その日に切り替えて本人を強調する */
+    shiftEditor.watchFocus(function (row) {
+      if (!row) { shiftHighlight = null; applyShiftHighlight(); return; }
+      shiftHighlight = row.person || null;
+      if (row.date && row.date !== shiftPrevDate) {
+        shiftPrevDate = row.date;
+        renderShiftPreview(buildShifts(shiftsToCsv(shiftEditor.rows)));
+      } else {
+        applyShiftHighlight();
+      }
+    });
 
     /* シフトタブ：日付を選んで、その日の班別シフト表を描く */
     function renderShifts(sh) {
@@ -3875,6 +4079,13 @@ function main() {
     function rerenderShiftOnShow() {
       renderShifts(buildShifts(shiftsToCsv(shiftEditor.rows)));
     }
+
+    var editTabs = setupEditTabs(function (name) {
+      /* 隠れている間に描いた図は文字幅を測れていない。見せる時に描き直す。 */
+      if (name === 'task') preview.render();
+      else preview.pause();
+      if (name === 'shift') renderShiftPreview(buildShifts(shiftsToCsv(shiftEditor.rows)));
+    });
 
     setupTabs(function (name) {
       if (name !== 'floor') floor.pause();
