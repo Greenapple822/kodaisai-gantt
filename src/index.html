@@ -19,6 +19,7 @@
   <div class="tabs" role="tablist">
     <button type="button" role="tab" data-view="team" aria-selected="true">ビュー1　班別ガント</button>
     <button type="button" role="tab" data-view="floor" aria-selected="false">ビュー3　平面図タイムライン</button>
+    <button type="button" role="tab" data-view="shift" aria-selected="false">本番シフト</button>
     <button type="button" role="tab" data-view="edit" aria-selected="false">編集</button>
   </div>
   <button type="button" id="print-btn" class="primary">PDFで書き出す（A4横）</button>
@@ -71,6 +72,21 @@
     <div class="chart floor-chart"><div id="view-floor"></div></div>
     <aside class="floor-now" id="floor-now"></aside>
   </div>
+</section>
+
+<!-- ===== 本番シフト ===== -->
+<section id="panel-shift" hidden>
+  <div class="shift-bar no-print">
+    <span class="shift-label">本番日</span>
+    <div class="shift-days" id="shift-days" role="tablist"></div>
+    <span class="hint" id="shift-meta"></span>
+  </div>
+  <div class="legend" id="legend-shift"></div>
+  <div class="chart"><div id="view-shift"></div></div>
+  <p class="shift-note no-print">
+    赤い破線と桃色の帯が実行委の企画枠、灰色は多目的ホールが使えない時間です。
+    バーにカーソルを乗せると備考が出ます。担当は「編集」タブの<strong>シフト</strong>表で直せます。
+  </p>
 </section>
 
 <!-- ===== 編集（画面専用） ===== -->
@@ -133,6 +149,18 @@
     <strong>担当</strong>は複数なら <code>・</code> 区切りで書きます。
   </p>
   <div class="edit-scroll" id="edit-table"></div>
+
+  <h2 class="edit-section">本番シフト</h2>
+  <p class="edit-help">
+    本番当日（多目的ホールステージ）の担当です。<strong>日付</strong>は <code>2026-10-17</code> の形で書きます。
+    <strong>種別</strong>は空欄＝人のシフト、<code>program</code>＝実行委の企画枠、<code>hall</code>＝会場が使える時間です。
+    同じ人が役割を変えるときは行を分けてください。
+  </p>
+  <div class="edit-bar">
+    <button type="button" id="shift-add" class="primary">＋ シフトを追加</button>
+    <span class="hint" id="shift-count"></span>
+  </div>
+  <div class="edit-scroll" id="shift-table"></div>
 
   <h2 class="edit-section">場所（会場の配置）</h2>
   <p class="edit-help">

@@ -53,6 +53,10 @@ def sub_once(pattern, replacement, text, label):
 def main():
     schedule = read(os.path.join(DATA, 'schedule.csv'))
     layout = json.loads(read(os.path.join(DATA, 'layout.json')))
+    shifts = ''
+    shifts_path = os.path.join(DATA, 'shifts.csv')
+    if os.path.exists(shifts_path):      # 無くても動く。その場合はシフトのタブを出さない。
+        shifts = read(shifts_path)
     share = {}
     share_path = os.path.join(DATA, 'share.json')
     if os.path.exists(share_path):          # 無くても動く。その場合は共有保存を使わない。
@@ -64,7 +68,7 @@ def main():
     # 新しい版が出たことを画面が気づくための印
     build_id = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     payload = js_literal({'schedule': schedule, 'layout': layout, 'share': share,
-                          'build': build_id})
+                          'shifts': shifts, 'build': build_id})
 
     html = sub_once(r'<link rel="stylesheet" href="style\.css">',
                     '<style>\n' + css + '\n</style>', html, 'style.css の link')
@@ -91,8 +95,9 @@ def main():
         f.write(html)
 
     rows = max(0, len([ln for ln in schedule.splitlines() if ln.strip()]) - 1)
-    print('dist/index.html を出力しました（%.1f KB, CSV %d行, エリア %d箇所）'
-          % (os.path.getsize(out) / 1024.0, rows, len(layout.get('areas', []))))
+    srows = max(0, len([ln for ln in shifts.splitlines() if ln.strip()]) - 1)
+    print('dist/index.html を出力しました（%.1f KB, 作業 %d行, シフト %d行, エリア %d箇所）'
+          % (os.path.getsize(out) / 1024.0, rows, srows, len(layout.get('areas', []))))
     print('ダブルクリックで開けます: %s' % out)
 
     # GitHub Pages はこのフォルダをそのまま配信する。中身は配布版と同一。

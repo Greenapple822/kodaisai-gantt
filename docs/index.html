@@ -213,6 +213,48 @@ button.primary:hover { filter: brightness(1.08); }
 .res-list li { padding: 6px 0; border-top: 1px solid var(--line); }
 .empty { color: var(--fg-sub); margin: 4px 0; }
 
+/* ---------- 本番シフト ---------- */
+
+.shift-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-alt);
+  font-size: 12px;
+}
+
+.shift-label { font-weight: bold; }
+.shift-days { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.shift-days button {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--fg-sub);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.shift-days button[aria-selected="true"] {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: #fff;
+  font-weight: bold;
+}
+
+.shift-bar #shift-meta { margin-left: auto; }
+#view-shift svg { min-width: 760px; }
+
+.shift-note { font-size: 12px; color: var(--fg-sub); margin: 10px 2px 0; }
+
 /* ---------- 編集パネル ---------- */
 
 #draft-bar {
@@ -873,8 +915,17 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   .no-print { display: none !important; }
   .print-only { display: block !important; font-size: 9pt; color: #555; margin: 2px 0 0; }
 
-  /* どのタブを開いていても、紙に出るのは班別ガント */
+  /* どのタブを開いていても、紙に出るのは 1枚目=班別ガント / 2枚目=選んだ日のシフト表 */
   #panel-team { display: block !important; }
+
+  #panel-shift {
+    display: block !important;
+    break-before: page;
+    page-break-before: always;
+  }
+
+  #panel-shift .legend { margin-top: 0; }
+  #view-shift svg { min-width: 0 !important; width: 100% !important; height: auto !important; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
   .variant-bar, #shared-conflict, #new-version { display: none !important; }
 
@@ -909,6 +960,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   <div class="tabs" role="tablist">
     <button type="button" role="tab" data-view="team" aria-selected="true">ビュー1　班別ガント</button>
     <button type="button" role="tab" data-view="floor" aria-selected="false">ビュー3　平面図タイムライン</button>
+    <button type="button" role="tab" data-view="shift" aria-selected="false">本番シフト</button>
     <button type="button" role="tab" data-view="edit" aria-selected="false">編集</button>
   </div>
   <button type="button" id="print-btn" class="primary">PDFで書き出す（A4横）</button>
@@ -961,6 +1013,21 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     <div class="chart floor-chart"><div id="view-floor"></div></div>
     <aside class="floor-now" id="floor-now"></aside>
   </div>
+</section>
+
+<!-- ===== 本番シフト ===== -->
+<section id="panel-shift" hidden>
+  <div class="shift-bar no-print">
+    <span class="shift-label">本番日</span>
+    <div class="shift-days" id="shift-days" role="tablist"></div>
+    <span class="hint" id="shift-meta"></span>
+  </div>
+  <div class="legend" id="legend-shift"></div>
+  <div class="chart"><div id="view-shift"></div></div>
+  <p class="shift-note no-print">
+    赤い破線と桃色の帯が実行委の企画枠、灰色は多目的ホールが使えない時間です。
+    バーにカーソルを乗せると備考が出ます。担当は「編集」タブの<strong>シフト</strong>表で直せます。
+  </p>
 </section>
 
 <!-- ===== 編集（画面専用） ===== -->
@@ -1024,6 +1091,18 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   </p>
   <div class="edit-scroll" id="edit-table"></div>
 
+  <h2 class="edit-section">本番シフト</h2>
+  <p class="edit-help">
+    本番当日（多目的ホールステージ）の担当です。<strong>日付</strong>は <code>2026-10-17</code> の形で書きます。
+    <strong>種別</strong>は空欄＝人のシフト、<code>program</code>＝実行委の企画枠、<code>hall</code>＝会場が使える時間です。
+    同じ人が役割を変えるときは行を分けてください。
+  </p>
+  <div class="edit-bar">
+    <button type="button" id="shift-add" class="primary">＋ シフトを追加</button>
+    <span class="hint" id="shift-count"></span>
+  </div>
+  <div class="edit-scroll" id="shift-table"></div>
+
   <h2 class="edit-section">場所（会場の配置）</h2>
   <p class="edit-help">
     <strong>平面図の中の場所をクリックしてつかむと動かせます。</strong>
@@ -1084,7 +1163,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
 </div>
 
 <script>
-window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}, "build": "20260921-233411"};
+window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}, "shifts": "date,team,person,role,start,end,note,kind\n2026-10-17,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-17,全班,,工大祭コンサート,14:00,15:30,企画①,program\n2026-10-17,音響,山田,仕込み,09:30,12:00,,\n2026-10-17,音響,山田,音響卓,12:30,16:30,,\n2026-10-17,音響,中村,仕込み,09:30,12:00,,\n2026-10-17,音響,中村,モニター,12:30,16:30,,\n2026-10-17,音響,伊藤,マイク・ワイヤレス,12:30,16:00,電池は予備を持つ,\n2026-10-17,映像,小林,仕込み,09:30,12:00,,\n2026-10-17,映像,小林,スイッチャー,12:30,16:30,,\n2026-10-17,映像,加藤,仕込み,09:30,12:00,,\n2026-10-17,映像,加藤,カメラ（上手）,12:30,16:00,,\n2026-10-17,映像,吉田,カメラ（下手）,12:30,16:00,,\n2026-10-17,照明,佐藤,仕込み,09:30,12:00,,\n2026-10-17,照明,佐藤,調光卓,12:30,16:30,,\n2026-10-17,照明,鈴木,仕込み,09:30,12:00,,\n2026-10-17,照明,鈴木,フォロー,13:30,16:00,,\n2026-10-17,照明,高橋,舞台周り,09:30,16:30,,\n2026-10-17,全班,渡辺,進行・インカム,09:30,16:30,実行委との窓口,\n2026-10-18,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-18,全班,,このレジスタにより,14:00,15:30,企画②,program\n2026-10-18,全班,,サテライト,16:00,18:00,企画③,program\n2026-10-18,音響,山田,点検・立ち上げ,09:30,10:30,,\n2026-10-18,音響,山田,音響卓,10:30,18:30,,\n2026-10-18,音響,中村,モニター,10:30,18:30,,\n2026-10-18,音響,伊藤,マイク・ワイヤレス,13:00,18:00,,\n2026-10-18,映像,小林,点検・立ち上げ,09:30,10:30,,\n2026-10-18,映像,小林,スイッチャー,10:30,18:30,,\n2026-10-18,映像,加藤,カメラ（上手）,13:00,18:00,,\n2026-10-18,映像,吉田,カメラ（下手）,13:00,18:00,,\n2026-10-18,照明,佐藤,点検・立ち上げ,09:30,10:30,,\n2026-10-18,照明,佐藤,調光卓,10:30,18:30,,\n2026-10-18,照明,鈴木,フォロー,13:00,18:00,,\n2026-10-18,照明,高橋,舞台周り,09:30,18:30,,\n2026-10-18,全班,渡辺,進行・インカム,09:30,18:30,実行委との窓口,\n", "build": "20260924-000831"};
 </script>
 <script>
 'use strict';
@@ -1309,6 +1388,69 @@ function activeAt(items, t, kind) {
   return items.filter(function (i) {
     return i.kind === kind && i.start <= t && t < i.end;
   });
+}
+
+/* =====================  本番のシフト  ===================== */
+/* data/shifts.csv。日ごと・班ごとに「誰が・いつ・何を持つか」を並べる。
+   kind は空欄＝人のシフト、program＝実行委の企画枠、hall＝会場が使える時間。 */
+
+var SHIFT_COLS = ['date', 'team', 'person', 'role', 'start', 'end', 'note', 'kind'];
+
+function buildShifts(csvText) {
+  var issues = [];
+  var rows = parseCsv(csvText || '');
+  var items = [];
+
+  rows.forEach(function (r, n) {
+    var where = 'シフト ' + (n + 2) + '行目';
+    if (!r.date) { issues.push(where + '：日付が空です'); return; }
+    var s = toMin(r.start), e = toMin(r.end);
+    if (s === null || e === null) {
+      issues.push(where + '：開始 / 終了 が HH:MM ではありません');
+      return;
+    }
+    if (e <= s) { issues.push(where + '：終了が開始以前です'); return; }
+    var kind = (r.kind || '').toLowerCase();
+    if (kind !== 'program' && kind !== 'hall') kind = 'shift';
+    if (kind === 'shift') {
+      if (!r.person) { issues.push(where + '：担当者が空です'); }
+      if (!TEAM_COLORS[r.team]) {
+        issues.push(where + '：班 "' + r.team + '" は 映像 / 音響 / 照明 / 全班 のいずれかにしてください');
+      }
+    }
+    items.push({
+      date: r.date, team: r.team, person: r.person, role: r.role,
+      start: s, end: e, note: r.note || '', kind: kind
+    });
+  });
+
+  var dates = [];
+  items.forEach(function (i) { if (dates.indexOf(i.date) < 0) dates.push(i.date); });
+  dates.sort();
+
+  return { items: items, dates: dates, issues: issues };
+}
+
+function shiftsToCsv(rows) {
+  function cell(v) {
+    v = v === undefined || v === null ? '' : String(v);
+    if (/[",\n\r]/.test(v) || v !== v.trim()) return '"' + v.replace(/"/g, '""') + '"';
+    return v;
+  }
+  var out = [SHIFT_COLS.join(',')];
+  rows.forEach(function (r) {
+    out.push(SHIFT_COLS.map(function (c) { return cell(r[c]); }).join(','));
+  });
+  return out.join('\n') + '\n';
+}
+
+/* 曜日つきの見出し。2026-10-17 → 10/17（土） */
+var WDAY = ['日', '月', '火', '水', '木', '金', '土'];
+function fmtDate(iso) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  if (!m) return iso || '';
+  var d = new Date(+m[1], +m[2] - 1, +m[3]);
+  return (+m[2]) + '/' + (+m[3]) + '（' + WDAY[d.getDay()] + '）';
 }
 
 /* =====================  SVG ヘルパ  ===================== */
@@ -1762,6 +1904,170 @@ FloorView.prototype.renderList = function (t, tasks, resources) {
 
   this.listHost.innerHTML = html;
 };
+
+/* =====================  シフト表（縦＝人）  ===================== */
+/* 班ごとに区切り、その班の部員を縦に並べる。当日「自分がいつ何を持つか」を見る用。 */
+
+var SH_PAD_L = 84;     /* 名前の欄 */
+var SH_PAD_R = 16;
+var SH_PAD_T = 54;     /* 時間軸＋企画名 */
+var SH_ROW_H = 26;
+var SH_ROW_GAP = 4;
+var SH_HEAD_H = 22;    /* 班の見出し */
+var SH_PX_PER_MIN = 1.9;
+
+function renderShiftTable(model, date, container) {
+  var all = model.items.filter(function (i) { return i.date === date; });
+  var shifts = all.filter(function (i) { return i.kind === 'shift'; });
+  var programs = all.filter(function (i) { return i.kind === 'program'; })
+    .sort(function (a, b) { return a.start - b.start; });
+  var halls = all.filter(function (i) { return i.kind === 'hall'; });
+
+  container.innerHTML = '';
+  if (!all.length) {
+    container.innerHTML = '<p class="empty" style="padding:16px">この日のシフトはまだありません。</p>';
+    return null;
+  }
+
+  /* 時間軸は会場が使える時間と全シフトを包む */
+  var min = Infinity, max = -Infinity;
+  all.forEach(function (i) {
+    if (i.start < min) min = i.start;
+    if (i.end > max) max = i.end;
+  });
+  var range = { start: Math.floor(min / SNAP) * SNAP, end: Math.ceil(max / SNAP) * SNAP };
+  var plotW = (range.end - range.start) * SH_PX_PER_MIN;
+  var width = SH_PAD_L + plotW + SH_PAD_R;
+  var x = function (m) { return SH_PAD_L + (m - range.start) * SH_PX_PER_MIN; };
+
+  /* 班ごとに、その班に出てくる人を並べる（CSVに出てきた順） */
+  var groups = [];
+  TEAM_ORDER.forEach(function (team) {
+    var mine = shifts.filter(function (i) { return i.team === team; });
+    if (!mine.length) return;
+    var people = [];
+    mine.forEach(function (i) { if (people.indexOf(i.person) < 0) people.push(i.person); });
+    groups.push({ team: team, people: people, items: mine });
+  });
+
+  var y = SH_PAD_T;
+  groups.forEach(function (g) {
+    g.y = y;
+    y += SH_HEAD_H;
+    g.rows = g.people.map(function (p) {
+      var row = { person: p, y: y };
+      y += SH_ROW_H + SH_ROW_GAP;
+      return row;
+    });
+    g.h = y - g.y;
+    y += 6;
+  });
+  var bottom = y;
+  var height = bottom + 10;
+
+  var svg = el('svg', {
+    viewBox: '0 0 ' + width + ' ' + height,
+    role: 'img',
+    'aria-label': fmtDate(date) + ' のシフト表'
+  }, container);
+
+  /* 会場が使えない時間帯を先に敷く */
+  if (halls.length) {
+    var open = { s: Math.min.apply(null, halls.map(function (h) { return h.start; })),
+                 e: Math.max.apply(null, halls.map(function (h) { return h.end; })) };
+    [[range.start, open.s], [open.e, range.end]].forEach(function (seg) {
+      if (seg[1] <= seg[0]) return;
+      el('rect', {
+        x: x(seg[0]), y: SH_PAD_T - 20, width: (seg[1] - seg[0]) * SH_PX_PER_MIN,
+        height: bottom - SH_PAD_T + 20, fill: '#eceef1'
+      }, svg);
+    });
+  }
+
+  /* 企画の枠。本番中はここが張り詰めるので、背景で分かるようにする。 */
+  programs.forEach(function (p, i) {
+    el('rect', {
+      x: x(p.start), y: SH_PAD_T - 20, width: (p.end - p.start) * SH_PX_PER_MIN,
+      height: bottom - SH_PAD_T + 20, fill: '#fdeaea'
+    }, svg);
+    [p.start, p.end].forEach(function (t) {
+      el('line', {
+        x1: x(t), y1: SH_PAD_T - 20, x2: x(t), y2: bottom,
+        stroke: WARN_COLOR, 'stroke-width': 1.5, 'stroke-dasharray': '6 4'
+      }, svg);
+    });
+    var lbl = el('text', {
+      x: x((p.start + p.end) / 2), y: i % 2 ? 26 : 13, 'text-anchor': 'middle',
+      'font-size': 11, 'font-weight': 'bold', fill: WARN_COLOR
+    }, svg);
+    fitText(lbl, p.role + ' ' + fmtMin(p.start) + '–' + fmtMin(p.end),
+      (p.end - p.start) * SH_PX_PER_MIN + 90);
+  });
+
+  /* 時間軸 */
+  for (var t = range.start; t <= range.end; t += SNAP) {
+    var isHour = t % 60 === 0;
+    el('line', {
+      x1: x(t), y1: SH_PAD_T - 20, x2: x(t), y2: bottom,
+      stroke: isHour ? '#c3c9d1' : '#e8ebef'
+    }, svg);
+    if (t % 30 === 0) {
+      var tick = el('text', {
+        x: x(t), y: SH_PAD_T - 26, 'text-anchor': 'middle',
+        'font-size': isHour ? 12 : 10, 'font-weight': isHour ? 'bold' : 'normal',
+        fill: isHour ? '#1b1d21' : '#5b6169'
+      }, svg);
+      tick.textContent = fmtMin(t);
+    }
+  }
+  el('line', { x1: SH_PAD_L, y1: SH_PAD_T - 20, x2: SH_PAD_L, y2: bottom, stroke: '#a8afb8' }, svg);
+
+  /* 班ごとの見出しと、人の行 */
+  groups.forEach(function (g) {
+    el('rect', { x: 0, y: g.y, width: width, height: SH_HEAD_H, fill: TEAM_COLORS[g.team] }, svg);
+    var head = el('text', {
+      x: 10, y: g.y + 15, 'font-size': 12, 'font-weight': 'bold', fill: '#ffffff'
+    }, svg);
+    head.textContent = g.team + '（' + g.people.length + '人）';
+
+    g.rows.forEach(function (row, idx) {
+      if (idx % 2) {
+        el('rect', { x: 0, y: row.y - 2, width: width, height: SH_ROW_H + 4, fill: '#f6f7f9' }, svg);
+      }
+      var nameNode = el('text', {
+        x: SH_PAD_L - 10, y: row.y + 17, 'text-anchor': 'end',
+        'font-size': 12, 'font-weight': 'bold', fill: '#1b1d21'
+      }, svg);
+      fitText(nameNode, row.person, SH_PAD_L - 16);
+
+      g.items.filter(function (i) { return i.person === row.person; })
+        .sort(function (a, b) { return a.start - b.start; })
+        .forEach(function (it) {
+          var bx = x(it.start);
+          var bw = Math.max(3, (it.end - it.start) * SH_PX_PER_MIN);
+          var grp = el('g', null, svg);
+          var title = el('title', null, grp);
+          title.textContent = row.person + '／' + it.role + '\n'
+            + fmtMin(it.start) + '–' + fmtMin(it.end)
+            + (it.note ? '\n備考：' + it.note : '');
+          el('rect', {
+            x: bx, y: row.y, width: bw, height: SH_ROW_H, rx: 4,
+            fill: TEAM_COLORS[it.team], stroke: 'rgba(0,0,0,0.25)'
+          }, grp);
+          var label = el('text', {
+            x: bx + 6, y: row.y + 12, 'font-size': 11, 'font-weight': 'bold', fill: '#ffffff'
+          }, grp);
+          fitText(label, it.role, bw - 12);
+          var time = el('text', {
+            x: bx + 6, y: row.y + 22, 'font-size': 9.5, fill: 'rgba(255,255,255,0.92)'
+          }, grp);
+          fitText(time, fmtMin(it.start) + '–' + fmtMin(it.end), bw - 12);
+        });
+    });
+  });
+
+  return { range: range, width: width, height: height, people: shifts.length };
+}
 
 /* =====================  場所の配置（ドラッグ編集）  ===================== */
 /* 平面図の上で直接つかんで動かす。座標は layout.json と同じ単位のまま持つ。 */
@@ -2364,13 +2670,14 @@ SharedStore.prototype.parse = function (text) {
       return {
         csv: o.csv,
         layout: o.layout || null,
+        shifts: typeof o.shifts === 'string' ? o.shifts : null,
         names: o.names || null,          /* 古い形式 */
         at: o.at || null,
         by: o.by || ''
       };
     }
   } catch (e) { /* JSON でなければ素の CSV とみなす */ }
-  return { csv: text, layout: null, names: null, at: null, by: '' };
+  return { csv: text, layout: null, shifts: null, names: null, at: null, by: '' };
 };
 
 SharedStore.prototype.load = function () {
@@ -2391,10 +2698,11 @@ SharedStore.prototype.load = function () {
   });
 };
 
-SharedStore.prototype.save = function (csv, layout, by) {
+SharedStore.prototype.save = function (csv, layout, shifts, by) {
   var self = this;
   if (!this.url) return Promise.reject(new Error('共有先が設定されていません'));
-  var body = JSON.stringify({ csv: csv, layout: layout || null, at: Date.now(), by: by || '' });
+  var body = JSON.stringify({ csv: csv, layout: layout || null, shifts: shifts,
+                              at: Date.now(), by: by || '' });
   /* text/plain にしておくと、ブラウザが事前問い合わせ(preflight)をしないで済む */
   return fetch(this.url, {
     method: 'POST',
@@ -2404,6 +2712,7 @@ SharedStore.prototype.save = function (csv, layout, by) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     self.remoteCsv = csv;
     self.remoteLayout = layout || null;
+    self.remoteShifts = shifts;
     self.at = Date.now();
     self.by = by || '';
     return self.at;
@@ -2488,6 +2797,12 @@ VariantStore.prototype.currentCsv = function () {
 };
 
 /* 会場のレイアウトも予定の一部として一緒に持ち運ぶ（既定のままなら null） */
+VariantStore.prototype.currentShifts = function () {
+  if (this.isShared()) return this.sharedShifts || this.baseShifts;
+  var v = this.active();
+  return (v && typeof v.shifts === 'string') ? v.shifts : this.baseShifts;
+};
+
 VariantStore.prototype.currentLayout = function () {
   if (this.isShared()) return this.sharedLayout || null;
   var v = this.active();
@@ -2505,9 +2820,9 @@ VariantStore.prototype.uniqueName = function (want) {
   return name + Date.now();
 };
 
-VariantStore.prototype.create = function (csv, want, layout) {
+VariantStore.prototype.create = function (csv, want, layout, shifts) {
   var v = { name: this.uniqueName(want || ('案' + (this.list.length + 1))), csv: csv,
-            layout: layout || null, at: Date.now() };
+            layout: layout || null, shifts: shifts, at: Date.now() };
   this.list.push(v);
   this.activeName = v.name;
   this.save();
@@ -2515,15 +2830,21 @@ VariantStore.prototype.create = function (csv, want, layout) {
 };
 
 /* 自動保存。配布時の予定を見たまま編集したら、新しい案を起こす。 */
-VariantStore.prototype.put = function (csv, layout) {
-  if (this.isShared()) { this.sharedCsv = csv; this.sharedLayout = layout || null; return null; }
+VariantStore.prototype.put = function (csv, layout, shifts) {
+  if (this.isShared()) {
+    this.sharedCsv = csv;
+    this.sharedLayout = layout || null;
+    this.sharedShifts = shifts;
+    return null;
+  }
   var v = this.active();
   if (!v) {
-    if (csv === this.base && !layout) return null;   /* 何も変えていない */
-    return this.create(csv, '案1', layout);
+    if (csv === this.base && !layout && shifts === this.baseShifts) return null;
+    return this.create(csv, '案1', layout, shifts);
   }
   v.csv = csv;
   v.layout = layout || null;
+  v.shifts = shifts;
   v.at = Date.now();
   this.save();
   return v;
@@ -2585,7 +2906,7 @@ function VariantBar(store, onLoad, sharedEnabled) {
   });
 
   document.getElementById('variant-new').addEventListener('click', function () {
-    store.create(self.getCsv(), '', store.currentLayout());
+    store.create(self.getCsv(), '', store.currentLayout(), store.currentShifts());
     self.render();
     self.flash('新しい案として保存しました');
     self.nameInput.focus();
@@ -2663,13 +2984,13 @@ VariantBar.prototype.flash = function (text) {
 };
 
 /* 編集のたびに呼ばれる。保存して、選択欄の見た目を合わせる。 */
-VariantBar.prototype.autoSave = function (csv, layout) {
+VariantBar.prototype.autoSave = function (csv, layout, shifts) {
   if (this.store.isShared()) {          /* 共有の保存は main 側が受け持つ */
-    this.store.put(csv, layout);
+    this.store.put(csv, layout, shifts);
     return true;
   }
   var wasActive = this.store.activeName;
-  var v = this.store.put(csv, layout);
+  var v = this.store.put(csv, layout, shifts);
   if (this.store.activeName !== wasActive) this.render();   /* 案が新しくできた */
   else this.showSaved(v);
   return this.store.persistent;
@@ -2779,6 +3100,161 @@ PreviewPane.prototype.highlight = function (row) {
 };
 
 PreviewPane.prototype.pause = function () { this.floor.pause(); };
+
+/* =====================  シフトの編集表  ===================== */
+
+var SHIFT_KIND_OPTIONS = [
+  { value: '', label: 'シフト' },
+  { value: 'program', label: '企画枠' },
+  { value: 'hall', label: '会場使用可' }
+];
+
+var SHIFT_FIELDS = [
+  { key: 'date',   label: '日付', type: 'date', width: '9em' },
+  { key: 'kind',   label: '種別', type: 'kind', width: '8em' },
+  { key: 'team',   label: '班',   type: 'team', width: '6em' },
+  { key: 'person', label: '担当', type: 'text', width: '7em' },
+  { key: 'role',   label: '役割', type: 'text', width: '12em' },
+  { key: 'start',  label: '開始', type: 'time', width: '7em' },
+  { key: 'end',    label: '終了', type: 'time', width: '7em' },
+  { key: 'note',   label: '備考', type: 'text', width: '11em' }
+];
+
+function ShiftEditor(opts) {
+  this.host = opts.table;
+  this.countHost = opts.count;
+  this.onChange = opts.onChange;
+  this.onUndoable = opts.onUndoable;
+  this.rows = [];
+  this.badRows = {};
+  this.bind();
+}
+
+ShiftEditor.prototype.setData = function (rows) {
+  this.rows = rows;
+  this.render();
+};
+
+ShiftEditor.prototype.cellHtml = function (f, row, i) {
+  var name = 'data-i="' + i + '" data-f="' + f.key + '"';
+  var v = row[f.key] || '';
+  var id = 'sh-' + f.key + '-' + i;
+  if (f.type === 'team' || f.type === 'kind') {
+    var opts = f.type === 'team'
+      ? TEAM_ORDER.map(function (t) { return { value: t, label: t }; })
+      : SHIFT_KIND_OPTIONS;
+    return '<select id="' + id + '" ' + name + '>' + opts.map(function (o) {
+      return '<option value="' + esc(o.value) + '"' + (o.value === v ? ' selected' : '') + '>'
+        + esc(o.label) + '</option>';
+    }).join('') + '</select>';
+  }
+  if (f.type === 'time') {
+    return '<input id="' + id + '" type="time" step="300" ' + name + ' value="' + esc(v) + '">';
+  }
+  if (f.type === 'date') {
+    return '<input id="' + id + '" type="date" ' + name + ' value="' + esc(v) + '">';
+  }
+  return '<input id="' + id + '" type="text" ' + name + ' value="' + esc(v) + '">';
+};
+
+ShiftEditor.prototype.render = function () {
+  var self = this;
+  var head = SHIFT_FIELDS.map(function (f) {
+    return '<th style="min-width:' + f.width + '">' + f.label + '</th>';
+  }).join('') + '<th class="ops-col">操作</th>';
+
+  var body = this.rows.map(function (row, i) {
+    var cells = SHIFT_FIELDS.map(function (f) {
+      return '<td data-label="' + f.label + '">' + self.cellHtml(f, row, i) + '</td>';
+    }).join('');
+    return '<tr>' + cells
+      + '<td data-label="操作" class="ops-col"><div class="ops">'
+      + '<button type="button" data-sact="up" data-i="' + i + '" aria-label="上へ">↑</button>'
+      + '<button type="button" data-sact="down" data-i="' + i + '" aria-label="下へ">↓</button>'
+      + '<button type="button" data-sact="dup" data-i="' + i + '">複製</button>'
+      + '<button type="button" data-sact="del" data-i="' + i + '" class="danger">削除</button>'
+      + '</div></td></tr>';
+  }).join('');
+
+  this.host.innerHTML = '<table class="edit-table"><thead><tr>' + head + '</tr></thead>'
+    + '<tbody>' + body + '</tbody></table>';
+  this.countHost.textContent = this.rows.length + '行';
+};
+
+/* buildShifts の警告（「シフト N行目」）から、赤くする行を決める */
+ShiftEditor.prototype.markIssues = function (issues) {
+  var self = this;
+  var bad = {};
+  issues.forEach(function (msg) {
+    var m = /^シフト (\d+)行目/.exec(msg);
+    if (m) bad[parseInt(m[1], 10) - 2] = true;
+  });
+  var trs = this.host.querySelectorAll('tbody tr');
+  [].slice.call(trs).forEach(function (tr, i) {
+    if (bad[i]) tr.classList.add('row-bad'); else tr.classList.remove('row-bad');
+  });
+  self.badRows = bad;
+};
+
+ShiftEditor.prototype.bind = function () {
+  var self = this;
+
+  function write(e) {
+    var t = e.target;
+    var i = t.getAttribute('data-i');
+    var f = t.getAttribute('data-f');
+    if (i === null || !f) return;
+    var row = self.rows[parseInt(i, 10)];
+    if (!row) return;
+    if (row[f] === t.value) return;
+    row[f] = t.value;
+    var structural = (f === 'kind' || f === 'team' || f === 'date');
+    self.onChange();
+    if (structural) self.render();
+  }
+  this.host.addEventListener('input', write);
+  this.host.addEventListener('change', write);
+
+  this.host.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('button[data-sact]') : null;
+    if (!btn) return;
+    var i = parseInt(btn.getAttribute('data-i'), 10);
+    var act = btn.getAttribute('data-sact');
+    var rows = self.rows;
+    var before = shiftsToCsv(rows);
+
+    if (act === 'up' && i > 0) { rows.splice(i - 1, 0, rows.splice(i, 1)[0]); }
+    else if (act === 'down' && i < rows.length - 1) { rows.splice(i + 1, 0, rows.splice(i, 1)[0]); }
+    else if (act === 'dup') {
+      var copy = {};
+      SHIFT_COLS.forEach(function (c) { copy[c] = rows[i][c]; });
+      rows.splice(i + 1, 0, copy);
+    } else if (act === 'del') {
+      var who = (rows[i].person || rows[i].role || 'この行');
+      rows.splice(i, 1);
+      self.render();
+      self.onChange();
+      if (self.onUndoable) self.onUndoable('「' + who + '」のシフトを削除しました', before);
+      return;
+    } else { return; }
+    self.render();
+    self.onChange();
+  });
+};
+
+ShiftEditor.prototype.addRow = function (date) {
+  var r = {};
+  SHIFT_COLS.forEach(function (c) { r[c] = ''; });
+  r.date = date || (this.rows.length ? this.rows[this.rows.length - 1].date : '');
+  r.team = '音響';
+  r.start = '13:00';
+  r.end = '16:00';
+  this.rows.push(r);
+  this.render();
+  this.onChange();
+  var last = this.host.querySelector('tbody tr:last-child input[data-f="person"]');
+  if (last) last.focus();
+};
 
 /* =====================  取り消し  ===================== */
 /* 共有ページでは確認ダイアログが出せない。先に実行して、あとから戻せるようにする。 */
@@ -2969,6 +3445,7 @@ function setupTabs(onShow) {
   var panels = {
     team: document.getElementById('panel-team'),
     floor: document.getElementById('panel-floor'),
+    shift: document.getElementById('panel-shift'),
     edit: document.getElementById('panel-edit')
   };
   function show(name) {
@@ -3028,14 +3505,16 @@ function loadData() {
       csv: window.EMBEDDED_DATA.schedule,
       layout: window.EMBEDDED_DATA.layout,
       share: window.EMBEDDED_DATA.share || null,
+      shifts: window.EMBEDDED_DATA.shifts || '',
       build: window.EMBEDDED_DATA.build || null
     });
   }
   return Promise.all([
     fetch('../data/schedule.csv').then(function (r) { return r.text(); }),
     fetch('../data/layout.json').then(function (r) { return r.json(); }),
-    fetch('../data/share.json').then(function (r) { return r.json(); }).catch(function () { return null; })
-  ]).then(function (v) { return { csv: v[0], layout: v[1], share: v[2] }; });
+    fetch('../data/share.json').then(function (r) { return r.json(); }).catch(function () { return null; }),
+    fetch('../data/shifts.csv').then(function (r) { return r.text(); }).catch(function () { return ''; })
+  ]).then(function (v) { return { csv: v[0], layout: v[1], share: v[2], shifts: v[3] }; });
 }
 
 function main() {
@@ -3048,10 +3527,13 @@ function main() {
 
     var shared = new SharedStore(d.share);
     watchForNewVersion(d.build);
+    var baseShifts = d.shifts || '';
+    var shiftDate = null;
 
     /* この端末に保存されている案があれば、前回の続きから開く */
     var store = new VariantStore(originalCsv);
     store.baseLayout = baseLayout;      /* 古い保存の読み替えに使う */
+    store.baseShifts = baseShifts;
     if (shared.enabled() && store.activeName === null) store.activeName = SHARED_KEY;
     var startCsv = store.currentCsv();
     layoutOverride = store.currentLayout();
@@ -3075,6 +3557,7 @@ function main() {
 
     renderLegend(document.getElementById('legend'), true);
     renderLegend(document.getElementById('legend-floor'), false);
+    renderLegend(document.getElementById('legend-shift'), false);
 
     var model = buildModel(toCsv(editor.rows), layout);
     renderIssues(model.issues, document.getElementById('issues'));
@@ -3091,6 +3574,19 @@ function main() {
 
     var preview = new PreviewPane(model, layout);
     editor.watchFocus(function (row) { preview.highlight(row); });
+
+    var shiftEditor = new ShiftEditor({
+      table: document.getElementById('shift-table'),
+      count: document.getElementById('shift-count'),
+      onChange: function () { refresh(); },
+      onUndoable: function (msg, csvBefore) {
+        undoBar.offer(msg, function () {
+          shiftEditor.setData(normalizeShiftRows(parseCsv(csvBefore)));
+          refresh();
+        });
+      }
+    });
+    shiftEditor.setData(normalizeShiftRows(parseCsv(store.currentShifts())));
 
     var layoutEditor = new LayoutEditor({
       host: document.getElementById('layout-canvas'),
@@ -3146,6 +3642,7 @@ function main() {
       layoutEditor.setData(baseLayout, layout);
       editor.layout = layout;
       editor.setData(normalizeRows(parseCsv(csv)), layout);
+      shiftEditor.setData(normalizeShiftRows(parseCsv(store.currentShifts())));
       rerender();
       if (store.isShared()) refreshShared();
     }, shared.enabled());
@@ -3167,19 +3664,56 @@ function main() {
     function rerender() {
       var csv = toCsv(editor.rows);
       var m = buildModel(csv, layout);
-      renderIssues(m.issues, document.getElementById('issues'));
+      var sh = buildShifts(shiftsToCsv(shiftEditor.rows));
+      renderIssues(m.issues.concat(sh.issues), document.getElementById('issues'));
       var i2 = renderTeamGantt(m, chart);
       floor.setModel(m);
       preview.setModel(m);
       editor.markIssues(m.issues);
+      shiftEditor.markIssues(sh.issues);
+      renderShifts(sh);
       updateMeta(m, i2.range);
       return csv;
     }
 
+    /* シフトタブ：日付を選んで、その日の班別シフト表を描く */
+    function renderShifts(sh) {
+      var days = document.getElementById('shift-days');
+      if (shiftDate === null || sh.dates.indexOf(shiftDate) < 0) {
+        shiftDate = sh.dates.length ? sh.dates[0] : null;
+      }
+      days.innerHTML = sh.dates.map(function (dt) {
+        return '<button type="button" role="tab" data-day="' + esc(dt) + '"'
+          + ' aria-selected="' + (dt === shiftDate ? 'true' : 'false') + '">'
+          + esc(fmtDate(dt)) + '</button>';
+      }).join('');
+      var info = renderShiftTable(sh, shiftDate, document.getElementById('view-shift'));
+      var n = sh.items.filter(function (i) {
+        return i.kind === 'shift' && i.date === shiftDate;
+      });
+      var people = [];
+      n.forEach(function (i) { if (people.indexOf(i.person) < 0) people.push(i.person); });
+      document.getElementById('shift-meta').textContent = info
+        ? fmtDate(shiftDate) + '　' + fmtMin(info.range.start) + '–' + fmtMin(info.range.end)
+          + '　' + people.length + '人 ／ ' + n.length + '件'
+        : '';
+    }
+
+    document.getElementById('shift-days').addEventListener('click', function (e) {
+      var b = e.target.closest ? e.target.closest('button[data-day]') : null;
+      if (!b) return;
+      shiftDate = b.getAttribute('data-day');
+      rerender();
+    });
+
+    document.getElementById('shift-add').addEventListener('click', function () {
+      shiftEditor.addRow(shiftDate);
+    });
+
     /* 編集されるたびに、同じ CSV から全ビューを作り直し、自動保存する */
     function refresh() {
       var csv = rerender();
-      variantBar.autoSave(csv, layoutOverride);
+      variantBar.autoSave(csv, layoutOverride, shiftsToCsv(shiftEditor.rows));
       if (store.isShared()) queueSharedSave();
       updateDraftBar(store);
     }
@@ -3209,7 +3743,7 @@ function main() {
       var csv = pendingCsv;
       pendingCsv = null;
       savingNow = true;
-      shared.save(csv, layoutOverride, who()).then(function (at) {
+      shared.save(csv, layoutOverride, shiftsToCsv(shiftEditor.rows), who()).then(function (at) {
         savingNow = false;
         variantBar.showShared('saved', { at: at, by: who() });
         if (pendingCsv !== null) flushSharedSave();   /* 送っている間の変更を送り直す */
@@ -3222,8 +3756,10 @@ function main() {
     }
 
     /* サーバーの内容を画面に入れる */
-    function adoptShared(csv, remoteLayout, legacyNames) {
+    function adoptShared(csv, remoteLayout, remoteShifts, legacyNames) {
       store.sharedCsv = csv;
+      store.sharedShifts = (typeof remoteShifts === 'string') ? remoteShifts : baseShifts;
+      shiftEditor.setData(normalizeShiftRows(parseCsv(store.sharedShifts)));
       store.sharedLayout = remoteLayout || layoutFromNames(baseLayout, legacyNames);
       layoutOverride = store.sharedLayout;
       layout = effectiveLayout(baseLayout, layoutOverride);
@@ -3243,7 +3779,7 @@ function main() {
         var mine = toCsv(editor.rows);
         if (got.csv === mine) return;
         if (mine === (store.sharedCsv || originalCsv)) {
-          adoptShared(got.csv, got.layout, got.names);                      /* 自分は何も変えていない。黙って追従。 */
+          adoptShared(got.csv, got.layout, got.shifts, got.names);                      /* 自分は何も変えていない。黙って追従。 */
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else {
           /* 自分の編集を消さない。読み込むかどうかは本人に決めさせる。 */
@@ -3256,7 +3792,7 @@ function main() {
     }
 
     document.getElementById('shared-load').addEventListener('click', function () {
-      shared.load().then(function (got) { if (got) adoptShared(got.csv, got.layout, got.names); });
+      shared.load().then(function (got) { if (got) adoptShared(got.csv, got.layout, got.shifts, got.names); });
     });
     document.getElementById('shared-keep').addEventListener('click', function () {
       document.getElementById('shared-conflict').hidden = true;
@@ -3275,7 +3811,7 @@ function main() {
       shared.load().then(function (got) {
         if (!store.isShared()) return;
         if (got) {
-          adoptShared(got.csv, got.layout, got.names);
+          adoptShared(got.csv, got.layout, got.shifts, got.names);
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else {
           variantBar.savedMsg.textContent = 'まだ誰も編集していません';
@@ -3289,7 +3825,7 @@ function main() {
       variantBar.showShared('loading');
       shared.load().then(function (got) {
         if (got && store.isShared()) {
-          adoptShared(got.csv, got.layout, got.names);
+          adoptShared(got.csv, got.layout, got.shifts, got.names);
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else if (store.isShared()) {
           /* まだ誰も保存していない。配布時の予定がそのまま「みんなの予定」になる。 */
@@ -3338,9 +3874,15 @@ function main() {
       if (e.key === 'ArrowRight') { floor.step(1); e.preventDefault(); }
     });
 
+    /* 隠れている間に描いた図は文字幅を測れていない。見せる時に描き直す。 */
+    function rerenderShiftOnShow() {
+      renderShifts(buildShifts(shiftsToCsv(shiftEditor.rows)));
+    }
+
     setupTabs(function (name) {
       if (name !== 'floor') floor.pause();
       if (name !== 'edit') preview.pause();
+      if (name === 'shift') rerenderShiftOnShow();
       /* 隠れている間に描いた図は文字幅を測れていない。見せる時に描き直す。 */
       if (name === 'edit') preview.render();
       if (name === 'floor') floor.redraw();
@@ -3371,6 +3913,15 @@ function main() {
 }
 
 /* CSV に列が足りなくても編集できるように、欠けている列を空で埋める */
+/* シフトCSVに列が足りなくても編集できるように、欠けている列を空で埋める */
+function normalizeShiftRows(rows) {
+  return rows.map(function (r) {
+    var o = {};
+    SHIFT_COLS.forEach(function (c) { o[c] = r[c] === undefined ? '' : r[c]; });
+    return o;
+  });
+}
+
 function normalizeRows(rows) {
   return rows.map(function (r) {
     var o = {};

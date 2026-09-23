@@ -206,6 +206,48 @@ button.primary:hover { filter: brightness(1.08); }
 .res-list li { padding: 6px 0; border-top: 1px solid var(--line); }
 .empty { color: var(--fg-sub); margin: 4px 0; }
 
+/* ---------- 本番シフト ---------- */
+
+.shift-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg-alt);
+  font-size: 12px;
+}
+
+.shift-label { font-weight: bold; }
+.shift-days { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.shift-days button {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 14px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--fg-sub);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.shift-days button[aria-selected="true"] {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: #fff;
+  font-weight: bold;
+}
+
+.shift-bar #shift-meta { margin-left: auto; }
+#view-shift svg { min-width: 760px; }
+
+.shift-note { font-size: 12px; color: var(--fg-sub); margin: 10px 2px 0; }
+
 /* ---------- 編集パネル ---------- */
 
 #draft-bar {
@@ -866,8 +908,17 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   .no-print { display: none !important; }
   .print-only { display: block !important; font-size: 9pt; color: #555; margin: 2px 0 0; }
 
-  /* どのタブを開いていても、紙に出るのは班別ガント */
+  /* どのタブを開いていても、紙に出るのは 1枚目=班別ガント / 2枚目=選んだ日のシフト表 */
   #panel-team { display: block !important; }
+
+  #panel-shift {
+    display: block !important;
+    break-before: page;
+    page-break-before: always;
+  }
+
+  #panel-shift .legend { margin-top: 0; }
+  #view-shift svg { min-width: 0 !important; width: 100% !important; height: auto !important; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
   .variant-bar, #shared-conflict, #new-version { display: none !important; }
 
