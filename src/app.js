@@ -1500,6 +1500,24 @@ function SharedStore(cfg) {
 
 SharedStore.prototype.enabled = function () { return !!this.url; };
 
+/* 置き場所が一時的に応答しないことがある（無料サービスのため）。
+   最後に取れた内容を手元に控えておき、取りに行けないときはそれを出す。 */
+SharedStore.prototype.cacheKey = 'kodaisai-gantt-shared-cache-v1';
+
+SharedStore.prototype.remember = function (got) {
+  try { window.localStorage.setItem(this.cacheKey, JSON.stringify(got)); }
+  catch (e) { /* 控えられなくても動く */ }
+};
+
+SharedStore.prototype.recall = function () {
+  try {
+    var raw = window.localStorage.getItem(this.cacheKey);
+    if (!raw) return null;
+    var o = JSON.parse(raw);
+    return (o && typeof o.csv === 'string') ? o : null;
+  } catch (e) { return null; }
+};
+
 /* 中身は {csv, at, by} の JSON。素の CSV が入っていても読めるようにしておく。 */
 SharedStore.prototype.parse = function (text) {
   if (!text || !text.trim()) return null;
@@ -1532,6 +1550,7 @@ SharedStore.prototype.load = function () {
       self.remoteLayout = got.layout;
       self.at = got.at;
       self.by = got.by;
+      self.remember(got);
     }
     return got;
   });
@@ -2761,33 +2780,40 @@ function main() {
     /* 共有を選び直したときの読み込み。起動時と同じ処理を使う。 */
     function refreshShared() {
       variantBar.showShared('loading');
+      loadSharedWithRetry(1);
+    }
+
+    if (shared.enabled()) {
+      variantBar.showShared('loading');
+      loadSharedWithRetry(2);
+      setInterval(pollShared, shared.pollMs);
+    }
+
+    /* 置き場所が一時的にこける（CORSヘッダを返さない等）ことがあるので、
+       すぐ「つながりません」にせず、少し待って数回試す。
+       それでも駄目なら、前回取れた内容を出す。 */
+    function loadSharedWithRetry(left) {
       shared.load().then(function (got) {
         if (!store.isShared()) return;
         if (got) {
           adoptShared(got.csv, got.layout, got.shifts, got.names);
           variantBar.showShared('saved', { at: got.at, by: got.by });
         } else {
-          variantBar.savedMsg.textContent = 'まだ誰も編集していません';
-        }
-      }, function () {
-        if (store.isShared()) variantBar.showShared('offline');
-      });
-    }
-
-    if (shared.enabled()) {
-      variantBar.showShared('loading');
-      shared.load().then(function (got) {
-        if (got && store.isShared()) {
-          adoptShared(got.csv, got.layout, got.shifts, got.names);
-          variantBar.showShared('saved', { at: got.at, by: got.by });
-        } else if (store.isShared()) {
           /* まだ誰も保存していない。配布時の予定がそのまま「みんなの予定」になる。 */
           variantBar.savedMsg.textContent = 'まだ誰も編集していません';
         }
       }, function () {
-        if (store.isShared()) variantBar.showShared('offline');
+        if (!store.isShared()) return;
+        if (left > 0) { setTimeout(function () { loadSharedWithRetry(left - 1); }, 3000); return; }
+        var kept = shared.recall();
+        if (kept) {
+          adoptShared(kept.csv, kept.layout, kept.shifts, kept.names);
+          variantBar.savedMsg.textContent = 'つながらないため、前回取れた内容を表示しています';
+          variantBar.savedMsg.className = 'hint shared-error';
+        } else {
+          variantBar.showShared('offline');
+        }
       });
-      setInterval(pollShared, shared.pollMs);
     }
 
     /* 取り消しで戻したときは、いまの案にその内容を書き戻す */
