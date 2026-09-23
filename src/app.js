@@ -2492,6 +2492,10 @@ function main() {
     updateMeta(model, info.range);
     updateDraftBar(store);
 
+    /* 起動時に一度すべて描いておく。タブを開くまで中身が空だと、
+       印刷（PDF）にシフト表が乗らない。 */
+    rerender();
+
     /* 図だけ作り直す（案の切替や取り消しのように、保存しなくてよいとき） */
     function rerender() {
       var csv = toCsv(editor.rows);
