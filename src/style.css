@@ -983,7 +983,6 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
 
   #panel-shift .legend { margin-top: 0; }
   .shift-print-title { display: block !important; font-size: 13pt; margin: 0 0 4px; }
-  #view-shift svg { min-width: 0 !important; width: 100% !important; height: auto !important; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
   .variant-bar, #shared-conflict, #new-version { display: none !important; }
 
@@ -999,6 +998,11 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     page-break-inside: avoid;
   }
 
-  /* 画面用の最小幅を外し、A4 の紙幅ぴったりに縮める */
-  #view-team svg { min-width: 0 !important; width: 100% !important; height: auto !important; }
+  /* 画面用の最小幅と、拡大を抑えるための上限を外し、A4 の紙幅ぴったりに合わせる */
+  #view-team svg, #view-shift svg {
+    min-width: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+    height: auto !important;
+  }
 }
