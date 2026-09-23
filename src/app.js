@@ -742,7 +742,7 @@ FloorView.prototype.renderList = function (t, tasks, resources) {
 
 var SH_PAD_L = 84;     /* 名前の欄 */
 var SH_PAD_R = 16;
-var SH_PAD_T = 54;     /* 時間軸＋企画名 */
+var SH_PAD_T = 66;     /* 時間軸＋企画名（2段ぶんの余白を取る） */
 var SH_ROW_H = 26;
 var SH_ROW_GAP = 4;
 var SH_HEAD_H = 22;    /* 班の見出し */
@@ -829,7 +829,7 @@ function renderShiftTable(model, date, container) {
       }, svg);
     });
     var lbl = el('text', {
-      x: x((p.start + p.end) / 2), y: i % 2 ? 26 : 13, 'text-anchor': 'middle',
+      x: x((p.start + p.end) / 2), y: i % 2 ? 26 : 12, 'text-anchor': 'middle',
       'font-size': 11, 'font-weight': 'bold', fill: WARN_COLOR
     }, svg);
     fitText(lbl, p.role + ' ' + fmtMin(p.start) + '–' + fmtMin(p.end),
@@ -845,7 +845,7 @@ function renderShiftTable(model, date, container) {
     }, svg);
     if (t % 30 === 0) {
       var tick = el('text', {
-        x: x(t), y: SH_PAD_T - 26, 'text-anchor': 'middle',
+        x: x(t), y: SH_PAD_T - 26, 'text-anchor': 'middle',   /* 企画名の下に置く */
         'font-size': isHour ? 12 : 10, 'font-weight': isHour ? 'bold' : 'normal',
         fill: isHour ? '#1b1d21' : '#5b6169'
       }, svg);
