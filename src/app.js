@@ -127,11 +127,15 @@ function buildModel(csvText, layout) {
       issues.push(where + '（' + r.id + '）：end が start 以前です');
       return;
     }
-    if (kind === 'task' && !r.area) {
+    /* 場所は複数持てる（, 区切り）。1つだけの古いデータもそのまま読める。 */
+    var areas = splitList(r.area, ',');
+    if (kind === 'task' && !areas.length) {
       issues.push(r.id + '：area が空です（平面図に出せません）');
     }
-    if (kind !== 'milestone' && r.area && !areaIds[r.area]) {
-      issues.push(r.id + '：area "' + r.area + '" が layout.json にありません');
+    if (kind !== 'milestone') {
+      areas.forEach(function (a) {
+        if (!areaIds[a]) issues.push(r.id + '：area "' + a + '" が layout.json にありません');
+      });
     }
     if (!TEAM_COLORS[r.team]) {
       issues.push(r.id + '：team "' + r.team + '" は 映像 / 音響 / 照明 / 全班 のいずれかにしてください');
@@ -140,8 +144,9 @@ function buildModel(csvText, layout) {
     items.push({
       id: r.id,
       team: r.team,
-      area: r.area,
-      areaName: areaIds[r.area] || r.area,
+      area: areas[0] || '',          /* 先頭の場所（1つだけ欲しい処理のため） */
+      areas: areas,
+      areaName: areas.map(function (a) { return areaIds[a] || a; }).join('・'),
       task: r.task,
       start: s,
       end: e,
@@ -642,8 +647,10 @@ FloorView.prototype.update = function () {
   /* エリアごとに、その時刻にいる班をまとめる */
   var byArea = {};
   tasks.forEach(function (it) {
-    if (!byArea[it.area]) byArea[it.area] = [];
-    byArea[it.area].push(it);
+    (it.areas || [it.area]).forEach(function (a) {
+      if (!byArea[a]) byArea[a] = [];
+      byArea[a].push(it);
+    });
   });
 
   var self = this;
@@ -1350,24 +1357,46 @@ EditorView.prototype.markIssues = function (issues) {
   });
 };
 
+/* 選んだ場所の名前を「ステージ上・下手袖」の形で返す */
+EditorView.prototype.areaSummary = function (ids) {
+  var areas = (this.layout && this.layout.areas) || [];
+  if (!ids.length) return '（なし）';
+  return ids.map(function (id) {
+    for (var k = 0; k < areas.length; k++) if (areas[k].id === id) return areas[k].name;
+    return id + '（不明）';
+  }).join('・');
+};
+
 EditorView.prototype.cellHtml = function (f, row, i) {
   var name = 'data-i="' + i + '" data-f="' + f.key + '"';
   var v = row[f.key] || '';
   var id = 'ed-' + f.key + '-' + i;
-  if (f.type === 'team' || f.type === 'kind' || f.type === 'area') {
+  if (f.type === 'area') {
+    /* 1つの作業が複数の場所にまたがることがある（配線など）。チェックで複数選ぶ。 */
+    var chosen = splitList(v, ',');
+    var areas = (this.layout && this.layout.areas) || [];
+    var known = areas.map(function (a) { return a.id; });
+    var boxes = areas.map(function (a) {
+      return '<label><input type="checkbox" data-i="' + i + '" data-apick="' + esc(a.id) + '"'
+        + (chosen.indexOf(a.id) >= 0 ? ' checked' : '') + '> ' + esc(a.name) + '</label>';
+    });
+    /* layout.json に無い場所が入っていても、黙って消さずに見せる */
+    chosen.forEach(function (c) {
+      if (known.indexOf(c) >= 0) return;
+      boxes.push('<label class="unknown"><input type="checkbox" data-i="' + i + '" data-apick="'
+        + esc(c) + '" checked> ' + esc(c) + '（不明）</label>');
+    });
+    var sum = this.areaSummary(chosen);
+    return '<details class="area-pick" id="' + id + '">'
+      + '<summary title="' + esc(sum) + '">' + esc(sum) + '</summary>'
+      + '<div class="area-pick-list">' + boxes.join('') + '</div></details>';
+  }
+  if (f.type === 'team' || f.type === 'kind') {
     var opts;
     if (f.type === 'team') {
       opts = TEAM_ORDER.map(function (t) { return { value: t, label: t }; });
-    } else if (f.type === 'kind') {
-      opts = KIND_OPTIONS;
     } else {
-      opts = [{ value: '', label: '（なし）' }].concat(
-        (this.layout.areas || []).map(function (a) { return { value: a.id, label: a.name }; })
-      );
-      /* layout.json に無い area が入っていても消さずに見せる */
-      if (v && !opts.some(function (o) { return o.value === v; })) {
-        opts.push({ value: v, label: v + '（不明）' });
-      }
+      opts = KIND_OPTIONS;
     }
     return '<select id="' + id + '" ' + name + '>' + opts.map(function (o) {
       return '<option value="' + esc(o.value) + '"' + (o.value === v ? ' selected' : '') + '>'
@@ -1411,9 +1440,36 @@ EditorView.prototype.render = function () {
 EditorView.prototype.bind = function () {
   var self = this;
 
+  /* 場所のチェック。選んだものを layout の並び順で , 区切りにして持つ。 */
+  function writeAreas(t) {
+    var row = self.rows[parseInt(t.getAttribute('data-i'), 10)];
+    var det = t.closest ? t.closest('details') : null;
+    if (!row || !det) return;
+    var picked = [].slice.call(det.querySelectorAll('input[data-apick]'))
+      .filter(function (c) { return c.checked; })
+      .map(function (c) { return c.getAttribute('data-apick'); });
+    var val = picked.join(',');
+    if (val === row.area) return;
+    row.area = val;
+    var sum = det.querySelector('summary');
+    sum.textContent = self.areaSummary(picked);
+    sum.title = sum.textContent;
+    self.onChange(false);       /* 開いたまま続けて選べるよう、表は作り直さない */
+  }
+
+  /* 場所の欄を1つ開いたら、他は閉じる（開きっぱなしで表が縦に伸びないように） */
+  this.host.addEventListener('toggle', function (e) {
+    var d = e.target;
+    if (!d.classList || !d.classList.contains('area-pick') || !d.open) return;
+    [].slice.call(self.host.querySelectorAll('details.area-pick[open]')).forEach(function (o) {
+      if (o !== d) o.open = false;
+    });
+  }, true);
+
   /* input と change の両方が飛んでくる。実際に変わったときだけ処理する。 */
   function write(e) {
     var t = e.target;
+    if (t.hasAttribute && t.hasAttribute('data-apick')) { writeAreas(t); return; }
     var i = t.getAttribute('data-i');
     var f = t.getAttribute('data-f');
     if (i === null || !f) return;
@@ -2574,19 +2630,10 @@ function main() {
       layoutOverride = sameLayout(layout, baseLayout) ? null : layout;
       editor.layout = layout;
       if (!fromNames) areaView.setData(layout);
-      if (structural) editor.render();        /* 場所が増減したら選択肢ごと作り直す */
-      else relabelAreaOptions();
+      /* 場所の名前・数が変わったので作業の表を作り直す。
+         会場の編集は別の区画で行うので、作業の表のフォーカスは失われない。 */
+      editor.render();
       refresh();
-    }
-
-    /* 表を作り直すと入力中のフォーカスが飛ぶので、選択肢の文字だけ差し替える */
-    function relabelAreaOptions() {
-      var byId = {};
-      layout.areas.forEach(function (a) { byId[a.id] = a.name; });
-      var opts = document.querySelectorAll('#edit-table select[data-f="area"] option');
-      [].slice.call(opts).forEach(function (o) {
-        if (o.value && byId[o.value]) o.textContent = byId[o.value];
-      });
     }
 
     var variantBar = new VariantBar(store, function (csv) {
