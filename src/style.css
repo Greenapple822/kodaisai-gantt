@@ -1020,8 +1020,32 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   body[data-print="shift"] #panel-team { display: none !important; }
   body[data-print="shift"] header .subtitle { display: none; }
 
-  .shift-print-title { display: block !important; font-size: 13pt; margin: 0 0 6px; }
+  /* シフトは1ページ＝1区切り。見出しは左、出力日時は右。 */
+  .print-shift-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 4mm;
+  }
+  .shift-print-title { display: block !important; font-size: 13pt; margin: 0; }
+  .print-shift-stamp { font-size: 8pt; color: #555; white-space: nowrap; }
   .print-shift-day .chart { border: none; overflow: visible; }
+
+  /* どれだけ人数が多くても、1ページの枠からはみ出さない。
+     はみ出すぶんは縮めて収める（班単位でページを分けているので、普段は縮まない）。 */
+  #print-shifts svg {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 168mm !important;
+  }
+
+  /* 設営ガントも同じく、1枚目の枠に必ず収める */
+  #view-team svg { max-height: 150mm !important; }
+
+  /* シフトだけ出すときは、各ページに見出しと日時があるので上の表題は要らない */
+  body[data-print="shift"] header { display: none !important; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
   .variant-bar, #shared-conflict, #new-version { display: none !important; }
 
@@ -1044,4 +1068,6 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     width: 100% !important;
     height: auto !important;
   }
+  /* 縮めて収めたとき、余った幅に左寄せで置く（preserveAspectRatio と合わせる） */
+  #view-team .chart, #print-shifts .chart { text-align: left; }
 }

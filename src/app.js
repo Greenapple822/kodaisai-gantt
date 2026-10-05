@@ -377,6 +377,7 @@ function renderTeamGantt(model, container) {
     /* 幅いっぱいに引き伸ばすと文字まで拡大され、画面やブラウザごとに見え方が変わる。
        本来の大きさで頭打ちにして、狭いときだけ枠内で横スクロールさせる。 */
     style: 'max-width:' + width + 'px',
+    preserveAspectRatio: 'xMinYMin meet',   /* 印刷で高さが足りないときは縮めて上に寄せる */
     role: 'img',
     'aria-label': '班別設営ガントチャート'
   }, container);
@@ -753,7 +754,71 @@ var SH_ROW_GAP = 4;
 var SH_HEAD_H = 22;    /* 班の見出し */
 var SH_PX_PER_MIN = 1.9;
 
-function renderShiftTable(model, date, container) {
+/* その日の時間軸。会場が使える時間と全シフトを包む。 */
+function shiftRangeFor(model, date) {
+  var min = Infinity, max = -Infinity;
+  model.items.forEach(function (i) {
+    if (i.date !== date) return;
+    if (i.start < min) min = i.start;
+    if (i.end > max) max = i.end;
+  });
+  if (!isFinite(min)) return null;
+  return { start: Math.floor(min / SNAP) * SNAP, end: Math.ceil(max / SNAP) * SNAP };
+}
+
+/* その日の班ごとの部員（CSVに出てきた順） */
+function shiftGroupsFor(model, date) {
+  var shifts = model.items.filter(function (i) { return i.date === date && i.kind === 'shift'; });
+  var groups = [];
+  TEAM_ORDER.forEach(function (team) {
+    var mine = shifts.filter(function (i) { return i.team === team; });
+    if (!mine.length) return;
+    var people = [];
+    mine.forEach(function (i) { if (people.indexOf(i.person) < 0) people.push(i.person); });
+    groups.push({ team: team, people: people, total: people.length, cont: false });
+  });
+  return groups;
+}
+
+/* 図の幅（図の中の単位）。印刷の1ページに何人入るかの計算に使う。 */
+function shiftWidthFor(range) {
+  return SH_PAD_L + (range.end - range.start) * SH_PX_PER_MIN + SH_PAD_R;
+}
+
+/* 班の見出し1つと、n人ぶんの行が占める高さ */
+function shiftGroupHeight(n) {
+  return SH_HEAD_H + n * (SH_ROW_H + SH_ROW_GAP) + 6;
+}
+
+/* 印刷用のページ割り。班の途中では切らない。
+   1班だけで1ページに入らないときだけ、その班を人で分けて「続き」にする。 */
+function packShiftPages(groups, budget) {
+  var base = SH_PAD_T + 10;
+  var pages = [], cur = [], h = base;
+  function flush() { if (cur.length) { pages.push(cur); cur = []; h = base; } }
+  groups.forEach(function (g) {
+    var need = shiftGroupHeight(g.people.length);
+    if (base + need <= budget) {
+      if (h + need > budget) flush();
+      cur.push(g);
+      h += need;
+      return;
+    }
+    /* 大きすぎる班：入るだけずつに分ける */
+    flush();
+    var per = Math.max(1, Math.floor((budget - base - SH_HEAD_H - 6) / (SH_ROW_H + SH_ROW_GAP)));
+    for (var i = 0; i < g.people.length; i += per) {
+      var part = { team: g.team, people: g.people.slice(i, i + per), total: g.total, cont: i > 0 };
+      if (i + per < g.people.length) { pages.push([part]); }
+      else { cur = [part]; h = base + shiftGroupHeight(part.people.length); }
+    }
+  });
+  flush();
+  return pages;
+}
+
+function renderShiftTable(model, date, container, opts) {
+  opts = opts || {};
   var all = model.items.filter(function (i) { return i.date === date; });
   var shifts = all.filter(function (i) { return i.kind === 'shift'; });
   var programs = all.filter(function (i) { return i.kind === 'program'; })
@@ -766,25 +831,16 @@ function renderShiftTable(model, date, container) {
     return null;
   }
 
-  /* 時間軸は会場が使える時間と全シフトを包む */
-  var min = Infinity, max = -Infinity;
-  all.forEach(function (i) {
-    if (i.start < min) min = i.start;
-    if (i.end > max) max = i.end;
-  });
-  var range = { start: Math.floor(min / SNAP) * SNAP, end: Math.ceil(max / SNAP) * SNAP };
-  var plotW = (range.end - range.start) * SH_PX_PER_MIN;
-  var width = SH_PAD_L + plotW + SH_PAD_R;
+  var range = shiftRangeFor(model, date);
+  var width = shiftWidthFor(range);
   var x = function (m) { return SH_PAD_L + (m - range.start) * SH_PX_PER_MIN; };
 
-  /* 班ごとに、その班に出てくる人を並べる（CSVに出てきた順） */
-  var groups = [];
-  TEAM_ORDER.forEach(function (team) {
-    var mine = shifts.filter(function (i) { return i.team === team; });
-    if (!mine.length) return;
-    var people = [];
-    mine.forEach(function (i) { if (people.indexOf(i.person) < 0) people.push(i.person); });
-    groups.push({ team: team, people: people, items: mine });
+  /* 印刷のページ割りで一部の班・人だけを描くこともある */
+  var groups = (opts.groups || shiftGroupsFor(model, date)).map(function (g) {
+    return {
+      team: g.team, people: g.people, total: g.total || g.people.length, cont: !!g.cont,
+      items: shifts.filter(function (i) { return i.team === g.team && g.people.indexOf(i.person) >= 0; })
+    };
   });
 
   var y = SH_PAD_T;
@@ -805,6 +861,7 @@ function renderShiftTable(model, date, container) {
   var svg = el('svg', {
     viewBox: '0 0 ' + width + ' ' + height,
     style: 'max-width:' + width + 'px',
+    preserveAspectRatio: 'xMinYMin meet',
     role: 'img',
     'aria-label': fmtDate(date) + ' のシフト表'
   }, container);
@@ -866,7 +923,7 @@ function renderShiftTable(model, date, container) {
     var head = el('text', {
       x: 10, y: g.y + 15, 'font-size': 12, 'font-weight': 'bold', fill: '#ffffff'
     }, svg);
-    head.textContent = g.team + '（' + g.people.length + '人）';
+    head.textContent = g.team + '（' + g.total + '人' + (g.cont ? '・続き' : '') + '）';
 
     g.rows.forEach(function (row, idx) {
       if (idx % 2) {
@@ -2877,24 +2934,51 @@ function main() {
     /* 印刷は常に班別ガント1枚。他のタブを開いていても同じものが出る。 */
     /* 紙に出す直前に、全部の日のシフト表を作る。
        画面は1日ずつしか出さないので、印刷用は別に組み立てる。 */
+    /* 印刷1ページに図を置ける大きさ（A4横、余白10mm）。
+       幅 277mm に合わせたとき、高さ PRINT_CHART_MM に入る分だけを1ページに載せる。 */
+    var PRINT_PAGE_W_MM = 277;
+    var PRINT_CHART_MM = 168;
+
+    /* 紙に出す直前に、全部の日のシフト表を作る。
+       人数が多い日は班の区切りで複数ページに分け、どのページにも見出しと時間軸を付ける。 */
     function buildPrintShifts() {
       var host = document.getElementById('print-shifts');
       host.innerHTML = '';
       var sh = buildShifts(shiftsToCsv(shiftEditor.rows));
-      sh.dates.forEach(function (dt) {
-        var sec = document.createElement('section');
-        sec.className = 'print-shift-day';
-        var h = document.createElement('h2');
-        h.className = 'shift-print-title';
-        h.textContent = '本番シフト　' + fmtDate(dt) + '　多目的ホールステージ';
-        sec.appendChild(h);
-        var box = document.createElement('div');
-        box.className = 'chart';
-        sec.appendChild(box);
-        host.appendChild(sec);
-        renderShiftTable(sh, dt, box);      /* 表示された状態で描く＝文字幅が測れる */
+      var stamp = new Date().toLocaleString('ja-JP', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
       });
-      return sh.dates.length;
+      var count = 0;
+      sh.dates.forEach(function (dt) {
+        var range = shiftRangeFor(sh, dt);
+        if (!range) return;
+        var budget = PRINT_CHART_MM * shiftWidthFor(range) / PRINT_PAGE_W_MM;
+        var pages = packShiftPages(shiftGroupsFor(sh, dt), budget);
+        if (!pages.length) pages = [[]];             /* 人がいなくても企画枠だけは出す */
+        pages.forEach(function (groups, k) {
+          var sec = document.createElement('section');
+          sec.className = 'print-shift-day';
+          var head = document.createElement('div');
+          head.className = 'print-shift-head';
+          var h = document.createElement('h2');
+          h.className = 'shift-print-title';
+          h.textContent = '本番シフト　' + fmtDate(dt) + '　多目的ホールステージ'
+            + (pages.length > 1 ? '（' + (k + 1) + '/' + pages.length + '）' : '');
+          var st = document.createElement('span');
+          st.className = 'print-shift-stamp';
+          st.textContent = '出力：' + stamp;
+          head.appendChild(h);
+          head.appendChild(st);
+          sec.appendChild(head);
+          var box = document.createElement('div');
+          box.className = 'chart print-shift-chart';
+          sec.appendChild(box);
+          host.appendChild(sec);
+          renderShiftTable(sh, dt, box, { groups: groups });
+          count++;
+        });
+      });
+      return count;
     }
 
     function doPrint(what) {

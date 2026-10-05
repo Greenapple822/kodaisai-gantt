@@ -1022,8 +1022,32 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
   body[data-print="shift"] #panel-team { display: none !important; }
   body[data-print="shift"] header .subtitle { display: none; }
 
-  .shift-print-title { display: block !important; font-size: 13pt; margin: 0 0 6px; }
+  /* シフトは1ページ＝1区切り。見出しは左、出力日時は右。 */
+  .print-shift-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 0 0 4mm;
+  }
+  .shift-print-title { display: block !important; font-size: 13pt; margin: 0; }
+  .print-shift-stamp { font-size: 8pt; color: #555; white-space: nowrap; }
   .print-shift-day .chart { border: none; overflow: visible; }
+
+  /* どれだけ人数が多くても、1ページの枠からはみ出さない。
+     はみ出すぶんは縮めて収める（班単位でページを分けているので、普段は縮まない）。 */
+  #print-shifts svg {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+    max-height: 168mm !important;
+  }
+
+  /* 設営ガントも同じく、1枚目の枠に必ず収める */
+  #view-team svg { max-height: 150mm !important; }
+
+  /* シフトだけ出すときは、各ページに見出しと日時があるので上の表題は要らない */
+  body[data-print="shift"] header { display: none !important; }
   #panel-floor, #panel-edit, #csv-modal, .preview, #undo-bar,
   .variant-bar, #shared-conflict, #new-version { display: none !important; }
 
@@ -1046,6 +1070,8 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
     width: 100% !important;
     height: auto !important;
   }
+  /* 縮めて収めたとき、余った幅に左寄せで置く（preserveAspectRatio と合わせる） */
+  #view-team .chart, #print-shifts .chart { text-align: left; }
 }
 
 </style>
@@ -1298,7 +1324,7 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
 </div>
 
 <script>
-window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}, "shifts": "date,team,person,role,start,end,note,kind\n2026-10-17,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-17,全班,,工大祭コンサート,14:00,15:30,企画①,program\n2026-10-17,音響,山田,仕込み,09:30,12:00,,\n2026-10-17,音響,山田,音響卓,12:30,16:30,,\n2026-10-17,音響,中村,仕込み,09:30,12:00,,\n2026-10-17,音響,中村,モニター,12:30,16:30,,\n2026-10-17,音響,伊藤,マイク・ワイヤレス,12:30,16:00,電池は予備を持つ,\n2026-10-17,映像,小林,仕込み,09:30,12:00,,\n2026-10-17,映像,小林,スイッチャー,12:30,16:30,,\n2026-10-17,映像,加藤,仕込み,09:30,12:00,,\n2026-10-17,映像,加藤,カメラ（上手）,12:30,16:00,,\n2026-10-17,映像,吉田,カメラ（下手）,12:30,16:00,,\n2026-10-17,照明,佐藤,仕込み,09:30,12:00,,\n2026-10-17,照明,佐藤,調光卓,12:30,16:30,,\n2026-10-17,照明,鈴木,仕込み,09:30,12:00,,\n2026-10-17,照明,鈴木,フォロー,13:30,16:00,,\n2026-10-17,照明,高橋,舞台周り,09:30,16:30,,\n2026-10-17,全班,渡辺,進行・インカム,09:30,16:30,実行委との窓口,\n2026-10-18,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-18,全班,,このレジスタにより,14:00,15:30,企画②,program\n2026-10-18,全班,,サテライト,16:00,18:00,企画③,program\n2026-10-18,音響,山田,点検・立ち上げ,09:30,10:30,,\n2026-10-18,音響,山田,音響卓,10:30,18:30,,\n2026-10-18,音響,中村,モニター,10:30,18:30,,\n2026-10-18,音響,伊藤,マイク・ワイヤレス,13:00,18:00,,\n2026-10-18,映像,小林,点検・立ち上げ,09:30,10:30,,\n2026-10-18,映像,小林,スイッチャー,10:30,18:30,,\n2026-10-18,映像,加藤,カメラ（上手）,13:00,18:00,,\n2026-10-18,映像,吉田,カメラ（下手）,13:00,18:00,,\n2026-10-18,照明,佐藤,点検・立ち上げ,09:30,10:30,,\n2026-10-18,照明,佐藤,調光卓,10:30,18:30,,\n2026-10-18,照明,鈴木,フォロー,13:00,18:00,,\n2026-10-18,照明,高橋,舞台周り,09:30,18:30,,\n2026-10-18,全班,渡辺,進行・インカム,09:30,18:30,実行委との窓口,\n", "build": "20260924-004329"};
+window.EMBEDDED_DATA = {"schedule": "id,team,area,task,start,end,owner,depends,note,kind\nA1,全班,storage,資材搬入,08:00,08:30,全員,,台車2台,\nA2,全班,stage,養生・バミリ,08:30,09:00,全員,A1,,\nL1,照明,stage,トラス組み,09:00,10:00,佐藤・鈴木,A2,高所作業,\nL2,照明,stage,灯体吊り込み,10:00,11:00,佐藤・鈴木,L1,脚立2台使用,\nL3,照明,foh,調光卓設置,09:00,09:45,高橋,A2,,\nL4,照明,stage,シュート,11:15,12:00,佐藤・高橋,\"L2,M1\",客電を落とす,\nS1,音響,stage,SP・モニター設置,09:00,10:00,山田・中村,A2,,\nS2,音響,foh,音響卓設置,09:00,10:00,伊藤,A2,,\nS3,音響,wingL,配線・結線,10:00,11:00,山田・伊藤,\"S1,S2\",,\nS4,音響,foh,サウンドチェック,11:15,12:00,山田・中村,\"S3,M2\",近隣に事前連絡,\nV1,映像,stage,LEDパネル組み,09:00,10:30,小林・加藤,A2,,\nV2,映像,foh,スイッチャー設置,10:00,11:00,吉田,A2,,\nV3,映像,wingR,カメラ設置,10:30,11:15,小林・加藤,V1,脚立1台使用,\nV4,映像,foh,映像送出確認,11:15,12:00,吉田・小林,\"V2,V3,M1\",,\nA3,全班,stage,通しリハ,12:00,12:45,全員,\"L4,S4,V4,M3\",,\nM1,全班,,電源投入,11:00,11:00,,,実行委に立会依頼,milestone\nM2,全班,,音出し可能,11:15,11:15,,M1,,milestone\nM3,全班,,通しリハ開始,12:00,12:00,,,,milestone\nM4,全班,,開場,13:00,13:00,,A3,,milestone\nR1,全班,stage,ステージ占有,09:00,11:00,照明・映像,,高所作業中は他班立入不可,resource\nR2,全班,stage,脚立(2台),10:00,11:15,照明・映像,,2台しかない,resource\nR3,全班,foh,舞台電源,11:00,13:00,全員,M1,投入後は常時通電,resource\n", "layout": {"viewBox": "0 0 680 400", "areas": [{"id": "stage", "name": "ステージ上", "x": 140, "y": 24, "w": 400, "h": 126}, {"id": "wingL", "name": "下手袖", "x": 40, "y": 24, "w": 90, "h": 126}, {"id": "wingR", "name": "上手袖", "x": 550, "y": 24, "w": 90, "h": 126}, {"id": "backstage", "name": "楽屋", "x": 40, "y": 160, "w": 90, "h": 140}, {"id": "floor", "name": "客席", "x": 140, "y": 160, "w": 400, "h": 132}, {"id": "storage", "name": "機材置場", "x": 550, "y": 160, "w": 90, "h": 140}, {"id": "foh", "name": "客席後方（卓）", "x": 140, "y": 302, "w": 400, "h": 76}]}, "share": {"endpoint": "https://textdb.dev/api/data/", "key": "kodaisai-gantt-2c8d1cd0316a69136c5918b0", "pollSeconds": 20, "_note": "みんなの予定の保存先。ログイン不要で読み書きできる代わりに、このURLを知っている人は誰でも書き換えられる。作り直したいときは key を別の長い文字列に変えて再ビルドする。"}, "shifts": "date,team,person,role,start,end,note,kind\n2026-10-17,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-17,全班,,工大祭コンサート,14:00,15:30,企画①,program\n2026-10-17,音響,山田,仕込み,09:30,12:00,,\n2026-10-17,音響,山田,音響卓,12:30,16:30,,\n2026-10-17,音響,中村,仕込み,09:30,12:00,,\n2026-10-17,音響,中村,モニター,12:30,16:30,,\n2026-10-17,音響,伊藤,マイク・ワイヤレス,12:30,16:00,電池は予備を持つ,\n2026-10-17,映像,小林,仕込み,09:30,12:00,,\n2026-10-17,映像,小林,スイッチャー,12:30,16:30,,\n2026-10-17,映像,加藤,仕込み,09:30,12:00,,\n2026-10-17,映像,加藤,カメラ（上手）,12:30,16:00,,\n2026-10-17,映像,吉田,カメラ（下手）,12:30,16:00,,\n2026-10-17,照明,佐藤,仕込み,09:30,12:00,,\n2026-10-17,照明,佐藤,調光卓,12:30,16:30,,\n2026-10-17,照明,鈴木,仕込み,09:30,12:00,,\n2026-10-17,照明,鈴木,フォロー,13:30,16:00,,\n2026-10-17,照明,高橋,舞台周り,09:30,16:30,,\n2026-10-17,全班,渡辺,進行・インカム,09:30,16:30,実行委との窓口,\n2026-10-18,全班,,会場使用可,09:30,18:00,実行委の割当,hall\n2026-10-18,全班,,このレジスタにより,14:00,15:30,企画②,program\n2026-10-18,全班,,サテライト,16:00,18:00,企画③,program\n2026-10-18,音響,山田,点検・立ち上げ,09:30,10:30,,\n2026-10-18,音響,山田,音響卓,10:30,18:30,,\n2026-10-18,音響,中村,モニター,10:30,18:30,,\n2026-10-18,音響,伊藤,マイク・ワイヤレス,13:00,18:00,,\n2026-10-18,映像,小林,点検・立ち上げ,09:30,10:30,,\n2026-10-18,映像,小林,スイッチャー,10:30,18:30,,\n2026-10-18,映像,加藤,カメラ（上手）,13:00,18:00,,\n2026-10-18,映像,吉田,カメラ（下手）,13:00,18:00,,\n2026-10-18,照明,佐藤,点検・立ち上げ,09:30,10:30,,\n2026-10-18,照明,佐藤,調光卓,10:30,18:30,,\n2026-10-18,照明,鈴木,フォロー,13:00,18:00,,\n2026-10-18,照明,高橋,舞台周り,09:30,18:30,,\n2026-10-18,全班,渡辺,進行・インカム,09:30,18:30,実行委との窓口,\n", "build": "20261005-133337"};
 </script>
 <script>
 'use strict';
@@ -1680,6 +1706,7 @@ function renderTeamGantt(model, container) {
     /* 幅いっぱいに引き伸ばすと文字まで拡大され、画面やブラウザごとに見え方が変わる。
        本来の大きさで頭打ちにして、狭いときだけ枠内で横スクロールさせる。 */
     style: 'max-width:' + width + 'px',
+    preserveAspectRatio: 'xMinYMin meet',   /* 印刷で高さが足りないときは縮めて上に寄せる */
     role: 'img',
     'aria-label': '班別設営ガントチャート'
   }, container);
@@ -2056,7 +2083,71 @@ var SH_ROW_GAP = 4;
 var SH_HEAD_H = 22;    /* 班の見出し */
 var SH_PX_PER_MIN = 1.9;
 
-function renderShiftTable(model, date, container) {
+/* その日の時間軸。会場が使える時間と全シフトを包む。 */
+function shiftRangeFor(model, date) {
+  var min = Infinity, max = -Infinity;
+  model.items.forEach(function (i) {
+    if (i.date !== date) return;
+    if (i.start < min) min = i.start;
+    if (i.end > max) max = i.end;
+  });
+  if (!isFinite(min)) return null;
+  return { start: Math.floor(min / SNAP) * SNAP, end: Math.ceil(max / SNAP) * SNAP };
+}
+
+/* その日の班ごとの部員（CSVに出てきた順） */
+function shiftGroupsFor(model, date) {
+  var shifts = model.items.filter(function (i) { return i.date === date && i.kind === 'shift'; });
+  var groups = [];
+  TEAM_ORDER.forEach(function (team) {
+    var mine = shifts.filter(function (i) { return i.team === team; });
+    if (!mine.length) return;
+    var people = [];
+    mine.forEach(function (i) { if (people.indexOf(i.person) < 0) people.push(i.person); });
+    groups.push({ team: team, people: people, total: people.length, cont: false });
+  });
+  return groups;
+}
+
+/* 図の幅（図の中の単位）。印刷の1ページに何人入るかの計算に使う。 */
+function shiftWidthFor(range) {
+  return SH_PAD_L + (range.end - range.start) * SH_PX_PER_MIN + SH_PAD_R;
+}
+
+/* 班の見出し1つと、n人ぶんの行が占める高さ */
+function shiftGroupHeight(n) {
+  return SH_HEAD_H + n * (SH_ROW_H + SH_ROW_GAP) + 6;
+}
+
+/* 印刷用のページ割り。班の途中では切らない。
+   1班だけで1ページに入らないときだけ、その班を人で分けて「続き」にする。 */
+function packShiftPages(groups, budget) {
+  var base = SH_PAD_T + 10;
+  var pages = [], cur = [], h = base;
+  function flush() { if (cur.length) { pages.push(cur); cur = []; h = base; } }
+  groups.forEach(function (g) {
+    var need = shiftGroupHeight(g.people.length);
+    if (base + need <= budget) {
+      if (h + need > budget) flush();
+      cur.push(g);
+      h += need;
+      return;
+    }
+    /* 大きすぎる班：入るだけずつに分ける */
+    flush();
+    var per = Math.max(1, Math.floor((budget - base - SH_HEAD_H - 6) / (SH_ROW_H + SH_ROW_GAP)));
+    for (var i = 0; i < g.people.length; i += per) {
+      var part = { team: g.team, people: g.people.slice(i, i + per), total: g.total, cont: i > 0 };
+      if (i + per < g.people.length) { pages.push([part]); }
+      else { cur = [part]; h = base + shiftGroupHeight(part.people.length); }
+    }
+  });
+  flush();
+  return pages;
+}
+
+function renderShiftTable(model, date, container, opts) {
+  opts = opts || {};
   var all = model.items.filter(function (i) { return i.date === date; });
   var shifts = all.filter(function (i) { return i.kind === 'shift'; });
   var programs = all.filter(function (i) { return i.kind === 'program'; })
@@ -2069,25 +2160,16 @@ function renderShiftTable(model, date, container) {
     return null;
   }
 
-  /* 時間軸は会場が使える時間と全シフトを包む */
-  var min = Infinity, max = -Infinity;
-  all.forEach(function (i) {
-    if (i.start < min) min = i.start;
-    if (i.end > max) max = i.end;
-  });
-  var range = { start: Math.floor(min / SNAP) * SNAP, end: Math.ceil(max / SNAP) * SNAP };
-  var plotW = (range.end - range.start) * SH_PX_PER_MIN;
-  var width = SH_PAD_L + plotW + SH_PAD_R;
+  var range = shiftRangeFor(model, date);
+  var width = shiftWidthFor(range);
   var x = function (m) { return SH_PAD_L + (m - range.start) * SH_PX_PER_MIN; };
 
-  /* 班ごとに、その班に出てくる人を並べる（CSVに出てきた順） */
-  var groups = [];
-  TEAM_ORDER.forEach(function (team) {
-    var mine = shifts.filter(function (i) { return i.team === team; });
-    if (!mine.length) return;
-    var people = [];
-    mine.forEach(function (i) { if (people.indexOf(i.person) < 0) people.push(i.person); });
-    groups.push({ team: team, people: people, items: mine });
+  /* 印刷のページ割りで一部の班・人だけを描くこともある */
+  var groups = (opts.groups || shiftGroupsFor(model, date)).map(function (g) {
+    return {
+      team: g.team, people: g.people, total: g.total || g.people.length, cont: !!g.cont,
+      items: shifts.filter(function (i) { return i.team === g.team && g.people.indexOf(i.person) >= 0; })
+    };
   });
 
   var y = SH_PAD_T;
@@ -2108,6 +2190,7 @@ function renderShiftTable(model, date, container) {
   var svg = el('svg', {
     viewBox: '0 0 ' + width + ' ' + height,
     style: 'max-width:' + width + 'px',
+    preserveAspectRatio: 'xMinYMin meet',
     role: 'img',
     'aria-label': fmtDate(date) + ' のシフト表'
   }, container);
@@ -2169,7 +2252,7 @@ function renderShiftTable(model, date, container) {
     var head = el('text', {
       x: 10, y: g.y + 15, 'font-size': 12, 'font-weight': 'bold', fill: '#ffffff'
     }, svg);
-    head.textContent = g.team + '（' + g.people.length + '人）';
+    head.textContent = g.team + '（' + g.total + '人' + (g.cont ? '・続き' : '') + '）';
 
     g.rows.forEach(function (row, idx) {
       if (idx % 2) {
@@ -4180,24 +4263,51 @@ function main() {
     /* 印刷は常に班別ガント1枚。他のタブを開いていても同じものが出る。 */
     /* 紙に出す直前に、全部の日のシフト表を作る。
        画面は1日ずつしか出さないので、印刷用は別に組み立てる。 */
+    /* 印刷1ページに図を置ける大きさ（A4横、余白10mm）。
+       幅 277mm に合わせたとき、高さ PRINT_CHART_MM に入る分だけを1ページに載せる。 */
+    var PRINT_PAGE_W_MM = 277;
+    var PRINT_CHART_MM = 168;
+
+    /* 紙に出す直前に、全部の日のシフト表を作る。
+       人数が多い日は班の区切りで複数ページに分け、どのページにも見出しと時間軸を付ける。 */
     function buildPrintShifts() {
       var host = document.getElementById('print-shifts');
       host.innerHTML = '';
       var sh = buildShifts(shiftsToCsv(shiftEditor.rows));
-      sh.dates.forEach(function (dt) {
-        var sec = document.createElement('section');
-        sec.className = 'print-shift-day';
-        var h = document.createElement('h2');
-        h.className = 'shift-print-title';
-        h.textContent = '本番シフト　' + fmtDate(dt) + '　多目的ホールステージ';
-        sec.appendChild(h);
-        var box = document.createElement('div');
-        box.className = 'chart';
-        sec.appendChild(box);
-        host.appendChild(sec);
-        renderShiftTable(sh, dt, box);      /* 表示された状態で描く＝文字幅が測れる */
+      var stamp = new Date().toLocaleString('ja-JP', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
       });
-      return sh.dates.length;
+      var count = 0;
+      sh.dates.forEach(function (dt) {
+        var range = shiftRangeFor(sh, dt);
+        if (!range) return;
+        var budget = PRINT_CHART_MM * shiftWidthFor(range) / PRINT_PAGE_W_MM;
+        var pages = packShiftPages(shiftGroupsFor(sh, dt), budget);
+        if (!pages.length) pages = [[]];             /* 人がいなくても企画枠だけは出す */
+        pages.forEach(function (groups, k) {
+          var sec = document.createElement('section');
+          sec.className = 'print-shift-day';
+          var head = document.createElement('div');
+          head.className = 'print-shift-head';
+          var h = document.createElement('h2');
+          h.className = 'shift-print-title';
+          h.textContent = '本番シフト　' + fmtDate(dt) + '　多目的ホールステージ'
+            + (pages.length > 1 ? '（' + (k + 1) + '/' + pages.length + '）' : '');
+          var st = document.createElement('span');
+          st.className = 'print-shift-stamp';
+          st.textContent = '出力：' + stamp;
+          head.appendChild(h);
+          head.appendChild(st);
+          sec.appendChild(head);
+          var box = document.createElement('div');
+          box.className = 'chart print-shift-chart';
+          sec.appendChild(box);
+          host.appendChild(sec);
+          renderShiftTable(sh, dt, box, { groups: groups });
+          count++;
+        });
+      });
+      return count;
     }
 
     function doPrint(what) {
