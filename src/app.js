@@ -338,14 +338,51 @@ function packRows(items) {
   return rows;
 }
 
-/* =====================  ビュー1: 班別ガント  ===================== */
+/* =====================  バーの中の文字の折り返し  ===================== */
+/* 「…」で切らずに全文を見せる。日本語は単語の区切りが無いので1文字ずつ詰め、
+   行頭に句読点が来ないようにだけ気をつける。
+   幅は文字の種類から見積もる（非表示のまま描いても、印刷用に描いても同じ結果になる）。 */
 
-function renderTeamGantt(model, container) {
+var NO_LINE_START = '、。，．・：；）」』】〕！？ー…';
+
+function charWidth(c, fs) {
+  var code = c.charCodeAt(0);
+  if (code < 0x80) return c === ' ' ? fs * 0.33 : fs * 0.62;   /* 英数字 */
+  if (code >= 0xFF61 && code <= 0xFF9F) return fs * 0.55;     /* 半角カナ */
+  return fs * 1.0;                                             /* 全角 */
+}
+
+function wrapLines(str, maxW, fs) {
+  str = String(str || '');
+  if (!str) return [];
+  maxW = Math.max(maxW, fs);           /* 1文字も入らない細いバーでも、最低1文字ずつは出す */
+  var lines = [], cur = '', w = 0;
+  for (var i = 0; i < str.length; i++) {
+    var c = str[i], cw = charWidth(c, fs);
+    if (cur && w + cw > maxW && NO_LINE_START.indexOf(c) < 0) {
+      lines.push(cur); cur = ''; w = 0;
+    }
+    cur += c; w += cw;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+var NAME_FS = 11, NAME_LH = 13;
+var OWNER_FS = 9.5, OWNER_LH = 11.5;
+var BAR_PAD_Y = 5;
+
+/* =====================  ビュー1: 班別ガント  ===================== */
+/* opts.width  … 図全体の幅（印刷で紙幅に合わせるとき）
+   opts.fitHeight … この高さまで行を伸ばして紙面を埋める（印刷用） */
+function renderTeamGantt(model, container, opts) {
+  opts = opts || {};
   var items = model.items;
   var range = timeRange(items);
   var span = range.end - range.start;
-  var plotW = span * PX_PER_MIN;
-  var width = PAD_L + plotW + PAD_R;
+  var pxPerMin = opts.width ? (opts.width - PAD_L - PAD_R) / span : PX_PER_MIN;
+  var width = PAD_L + span * pxPerMin + PAD_R;
+  var x = function (min) { return PAD_L + (min - range.start) * pxPerMin; };
 
   var milestones = items.filter(function (i) { return i.kind === 'milestone'; })
     .sort(function (a, b) { return a.start - b.start; });
@@ -365,31 +402,64 @@ function renderTeamGantt(model, container) {
     lanes.push({ name: SHARED_LANE, color: RESOURCE_COLOR, shared: true, rows: packRows(resources) });
   }
 
-  var y = PAD_T;
+  /* バーごとに折り返しを決め、行の高さは中で一番背の高いバーに合わせる */
+  var totalRows = 0;
   lanes.forEach(function (lane) {
-    lane.y = y;
-    lane.h = LANE_PAD * 2 + lane.rows.length * BAR_H + (lane.rows.length - 1) * BAR_GAP;
-    y += lane.h;
+    lane.rowH = lane.rows.map(function (row) {
+      var h = BAR_H;
+      row.forEach(function (it) {
+        var bw = Math.max(3, (it.end - it.start) * pxPerMin);
+        var inner = bw - 12;
+        it._name = wrapLines(it.task, inner, NAME_FS);
+        it._owner = it.owners.length ? wrapLines(it.owners.join('・'), inner, OWNER_FS) : [];
+        var need = BAR_PAD_Y * 2 + it._name.length * NAME_LH + it._owner.length * OWNER_LH;
+        if (need > h) h = need;
+      });
+      return h;
+    });
+    totalRows += lane.rows.length;
   });
-  var plotBottom = y;
-  var height = plotBottom + PAD_B;
 
-  var x = function (min) { return PAD_L + (min - range.start) * PX_PER_MIN; };
+  function layout() {
+    var y = PAD_T;
+    lanes.forEach(function (lane) {
+      lane.y = y;
+      var sum = lane.rowH.reduce(function (a, b) { return a + b; }, 0);
+      lane.h = LANE_PAD * 2 + sum + (lane.rows.length - 1) * BAR_GAP;
+      y += lane.h;
+    });
+    return y;
+  }
+  var plotBottom = layout();
+
+  /* 印刷用：紙面の高さが余るなら、行を均等に伸ばして埋める（伸ばしすぎない） */
+  if (opts.fitHeight && totalRows) {
+    var spare = opts.fitHeight - (plotBottom + PAD_B);
+    if (spare > 0) {
+      var add = Math.min(spare / totalRows, BAR_H * 5);   /* 行が極端に少ないときだけ頭打ち */
+      lanes.forEach(function (lane) {
+        lane.rowH = lane.rowH.map(function (h) { return h + add; });
+      });
+      plotBottom = layout();
+    }
+  }
+  var height = plotBottom + PAD_B;
 
   container.innerHTML = '';
   var svg = el('svg', {
     viewBox: '0 0 ' + width + ' ' + height,
     /* 幅いっぱいに引き伸ばすと文字まで拡大され、画面やブラウザごとに見え方が変わる。
        本来の大きさで頭打ちにして、狭いときだけ枠内で横スクロールさせる。 */
-    style: 'max-width:' + width + 'px',
+    style: opts.width ? '' : 'max-width:' + width + 'px',
     preserveAspectRatio: 'xMinYMin meet',   /* 印刷で高さが足りないときは縮めて上に寄せる */
     role: 'img',
     'aria-label': '班別設営ガントチャート'
   }, container);
 
+  var hatchId = 'hatch' + (opts.idSuffix || '');
   var defs = el('defs', null, svg);
   var pat = el('pattern', {
-    id: 'hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)'
+    id: hatchId, width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)'
   }, defs);
   el('rect', { width: 6, height: 6, fill: RESOURCE_COLOR }, pat);
   el('line', { x1: 0, y1: 0, x2: 0, y2: 6, stroke: '#ffffff', 'stroke-width': 2, opacity: 0.45 }, pat);
@@ -455,13 +525,14 @@ function renderTeamGantt(model, container) {
     lbl.textContent = ms.task + ' ' + fmtMin(ms.start);
   });
 
-  /* --- バー --- */
+  /* --- バー（文字は折り返して全文を出す） --- */
   lanes.forEach(function (lane) {
+    var by = lane.y + LANE_PAD;
     lane.rows.forEach(function (row, ri) {
-      var by = lane.y + LANE_PAD + ri * (BAR_H + BAR_GAP);
+      var rh = lane.rowH[ri];
       row.forEach(function (it) {
         var bx = x(it.start);
-        var bw = Math.max(3, (it.end - it.start) * PX_PER_MIN);
+        var bw = Math.max(3, (it.end - it.start) * pxPerMin);
         var g = el('g', { 'data-id': it.id }, svg);
 
         var title = el('title', null, g);
@@ -473,27 +544,31 @@ function renderTeamGantt(model, container) {
           + (it.note ? '\n備考：' + it.note : '');
 
         el('rect', {
-          x: bx, y: by, width: bw, height: BAR_H, rx: 4,
-          fill: lane.shared ? 'url(#hatch)' : TEAM_COLORS[it.team],
+          x: bx, y: by, width: bw, height: rh, rx: 4,
+          fill: lane.shared ? 'url(#' + hatchId + ')' : TEAM_COLORS[it.team],
           stroke: lane.shared ? '#4b5563' : 'rgba(0,0,0,0.25)',
           'stroke-width': 1
         }, g);
 
-        var inner = bw - 12;
-        var twoLines = it.owners.length > 0;
-        var nameNode = el('text', {
-          x: bx + 6, y: by + (twoLines ? 12 : 17),
-          'font-size': 11, 'font-weight': 'bold', fill: '#ffffff'
-        }, g);
-        fitText(nameNode, it.task, inner);
-
-        if (twoLines) {
-          var ownerNode = el('text', {
-            x: bx + 6, y: by + 22, 'font-size': 9.5, fill: 'rgba(255,255,255,0.92)'
+        /* 文字のかたまりをバーの縦中央に置く */
+        var block = it._name.length * NAME_LH + it._owner.length * OWNER_LH;
+        var ty = by + Math.max(BAR_PAD_Y, (rh - block) / 2);
+        it._name.forEach(function (line) {
+          ty += NAME_LH;
+          var tn = el('text', {
+            x: bx + 6, y: ty - 3, 'font-size': NAME_FS, 'font-weight': 'bold', fill: '#ffffff'
           }, g);
-          fitText(ownerNode, it.owners.join('・'), inner);
-        }
+          tn.textContent = line;
+        });
+        it._owner.forEach(function (line) {
+          ty += OWNER_LH;
+          var to = el('text', {
+            x: bx + 6, y: ty - 2.5, 'font-size': OWNER_FS, fill: 'rgba(255,255,255,0.92)'
+          }, g);
+          to.textContent = line;
+        });
       });
+      by += rh + BAR_GAP;
     });
   });
 
@@ -2032,7 +2107,7 @@ PreviewPane.prototype.setModel = function (model) {
 PreviewPane.prototype.render = function () {
   if (this.root.getAttribute('data-open') === 'false') return;
   if (this.which !== 'floor') {
-    renderTeamGantt(this.model, this.ganttHost);
+    renderTeamGantt(this.model, this.ganttHost, { idSuffix: '-prev' });
     this.applyHighlight();
   }
   if (this.which !== 'team') this.floor.redraw();
@@ -3028,10 +3103,49 @@ function main() {
       return count;
     }
 
+    /* 印刷1枚目のガント。紙面いっぱいに使うため、画面とは別に組む。
+       幅 GANTT_PRINT_W の図を紙幅 277mm に合わせ、高さは紙面の残りに合わせて行を伸ばす。 */
+    var GANTT_PRINT_W = 1000;
+    var GANTT_PRINT_CHART_MM = 166;
+
+    function buildPrintGantt() {
+      var host = document.getElementById('print-gantt');
+      host.innerHTML = '';
+      var m = buildModel(toCsv(editor.rows), layout);
+      var range = timeRange(m.items);
+      var stamp = new Date().toLocaleString('ja-JP', {
+        year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+      });
+      var head = document.createElement('div');
+      head.className = 'print-shift-head';
+      var h = document.createElement('h2');
+      h.className = 'shift-print-title';
+      h.textContent = '設営ガントチャート　' + fmtMin(range.start) + '–' + fmtMin(range.end);
+      var st = document.createElement('span');
+      st.className = 'print-shift-stamp';
+      st.textContent = '出力：' + stamp;
+      head.appendChild(h);
+      head.appendChild(st);
+      host.appendChild(head);
+      var lg = document.createElement('div');
+      lg.className = 'legend';
+      host.appendChild(lg);
+      renderLegend(lg, true);
+      var box = document.createElement('div');
+      box.className = 'chart print-gantt-chart';
+      host.appendChild(box);
+      renderTeamGantt(m, box, {
+        width: GANTT_PRINT_W,
+        fitHeight: GANTT_PRINT_W * GANTT_PRINT_CHART_MM / PRINT_PAGE_W_MM,
+        idSuffix: '-print'
+      });
+    }
+
     function doPrint(what) {
       floor.pause();
       preview.pause();
       document.body.setAttribute('data-print', what || 'all');
+      if (what !== 'shift') buildPrintGantt();
       if (what !== 'gantt') buildPrintShifts();
       printOpened = false;
       var hint = document.getElementById('print-hint');
@@ -3053,7 +3167,9 @@ function main() {
     document.body.setAttribute('data-print', 'all');
     window.addEventListener('beforeprint', function () {
       printOpened = true;
-      if (document.body.getAttribute('data-print') !== 'gantt') buildPrintShifts();
+      var what = document.body.getAttribute('data-print');
+      if (what !== 'shift') buildPrintGantt();
+      if (what !== 'gantt') buildPrintShifts();
     });
     document.getElementById('print-btn').addEventListener('click', function () {
       doPrint(document.getElementById('print-what').value);

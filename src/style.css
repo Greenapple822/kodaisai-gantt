@@ -230,7 +230,7 @@ button.primary:hover { filter: brightness(1.08); }
 .res-list li { padding: 6px 0; border-top: 1px solid var(--line); }
 .empty { color: var(--fg-sub); margin: 4px 0; }
 
-#print-shifts { display: none; }
+#print-gantt, #print-shifts { display: none; }
 
 .print-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
@@ -1048,10 +1048,26 @@ footer { margin-top: 16px; color: var(--fg-sub); font-size: 11px; }
 
   /* 紙に出すものは、ツールバーの「紙に出すもの」で決める。
      既定は 1枚目=班別ガント、2枚目以降=本番シフト（日ごとに1枚）。 */
-  #panel-team { display: block !important; }
-  #panel-shift { display: none !important; }
+  /* 紙には印刷専用に組んだものを出す。画面の表示（表題・ガント・シフト）は出さない。
+     各ページが自分の見出しと出力日時を持つ。 */
+  header, #panel-team, #panel-shift { display: none !important; }
 
-  #print-shifts { display: block !important; }
+  #print-gantt, #print-shifts { display: block !important; }
+  body[data-print="shift"] #print-gantt { display: none !important; }
+
+  /* ガントは A4 横の紙面いっぱいに。図そのものを紙の縦横比で組んでいるので、
+     幅に合わせればほぼ全面が埋まる。万一はみ出す分だけ縮める。 */
+  #print-gantt { break-inside: avoid; page-break-inside: avoid; }
+  #print-gantt .legend { margin: 0 0 2mm; }
+  #print-gantt .chart { border: none; overflow: visible; }
+  #print-gantt svg {
+    display: block;
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    min-width: 0 !important;
+    max-height: 170mm !important;
+  }
 
   .print-shift-day {
     break-inside: avoid;
